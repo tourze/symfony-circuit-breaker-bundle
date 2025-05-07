@@ -1,0 +1,33 @@
+{
+  "name": "tourze/symfony-circuit-breaker-bundle",
+  "description": "熔断器",
+  "type": "symfony-bundle",
+  "require": {
+    "php": "^8.1",
+    "symfony/config": "^6.4",
+    "symfony/dependency-injection": "^6.4",
+    "symfony/yaml": "^6.4 || ^7.1",
+    "symfony/cache": "^6.4",
+    "symfony/event-dispatcher": "^6.4",
+    "symfony/http-kernel": "^6.4",
+    "psr/log": "^3|^2|^1",
+    "ext-redis": "*"
+  },
+  "suggest": {
+    "ext-redis": "使用Redis存储熔断器状态"
+  },
+  "autoload": {
+    "psr-4": {
+      "Tourze\\Symfony\\CircuitBreaker\\": "src"
+    }
+  },
+  "require-dev": {
+    "phpstan/phpstan": "^2.1",
+    "phpunit/phpunit": "^10.0"
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Tourze\\Symfony\\CircuitBreaker\\Tests\\": "tests"
+    }
+  }
+}
