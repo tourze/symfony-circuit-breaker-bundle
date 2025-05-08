@@ -11,7 +11,10 @@
     "symfony/event-dispatcher": "^6.4",
     "symfony/http-kernel": "^6.4",
     "psr/log": "^3|^2|^1",
-    "ext-redis": "*"
+    "ext-redis": "*",
+    "symfony/console": "^6.4",
+    "symfony/event-dispatcher-contracts": "^2.5 | ^3",
+    "symfony/http-foundation": "^6.4"
   },
   "suggest": {
     "ext-redis": "使用Redis存储熔断器状态"
