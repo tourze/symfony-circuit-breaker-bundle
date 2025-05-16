@@ -11,7 +11,7 @@ class CircuitOpenException extends \RuntimeException
 {
     private string $circuitName;
 
-    public function __construct(string $circuitName, string $message = '', int $code = 0, \Throwable $previous = null)
+    public function __construct(string $circuitName, string $message = '', int $code = 0, ?\Throwable $previous = null)
     {
         $this->circuitName = $circuitName;
 

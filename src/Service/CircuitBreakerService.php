@@ -263,12 +263,12 @@ class CircuitBreakerService
      *
      * @param string $name 熔断器名称
      * @param callable $operation 要执行的操作
-     * @param callable|null $fallback 熔断后的降级操作
+     * @param ?callable $fallback 熔断后的降级操作
      * @return mixed 操作结果
      * @throws CircuitOpenException 如果熔断器处于开启状态且没有降级处理
      * @throws \Throwable 如果操作抛出异常且没有降级处理
      */
-    public function execute(string $name, callable $operation, callable $fallback = null): mixed
+    public function execute(string $name, callable $operation, ?callable $fallback = null): mixed
     {
         if (!$this->isAllowed($name)) {
             $this->logger->debug('熔断器拒绝请求: {circuit}', ['circuit' => $name]);

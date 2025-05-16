@@ -7,7 +7,7 @@ use Psr\Log\NullLogger;
 use ReflectionClass;
 use ReflectionException;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
-use Symfony\Component\HttpFoundation\RequestStack;
+use Symfony\Component\HttpKernel\Event\ControllerEvent;
 use Symfony\Component\HttpKernel\Event\ExceptionEvent;
 use Symfony\Component\HttpKernel\Event\ResponseEvent;
 use Symfony\Component\HttpKernel\KernelEvents;
@@ -28,19 +28,14 @@ class CircuitBreakerResponseSubscriber implements EventSubscriberInterface
 
     /**
      * @param CircuitBreakerService $circuitBreakerService 熔断器服务
-     * @param RequestStack $requestStack 请求堆栈
      * @param LoggerInterface|null $logger 日志记录器
      */
     public function __construct(
         private readonly CircuitBreakerService $circuitBreakerService,
-        private readonly RequestStack $requestStack,
         private readonly LoggerInterface $logger = new NullLogger()
     ) {
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public static function getSubscribedEvents(): array
     {
         return [
@@ -55,7 +50,7 @@ class CircuitBreakerResponseSubscriber implements EventSubscriberInterface
      * 
      * @throws ReflectionException
      */
-    public function onKernelController(\Symfony\Component\HttpKernel\Event\ControllerEvent $event): void
+    public function onKernelController(ControllerEvent $event): void
     {
         $request = $event->getRequest();
         $controller = $event->getController();
