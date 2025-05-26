@@ -36,42 +36,6 @@ return [
 
 ## Quick Start
 
-### Basic Configuration
-
-Create a configuration file `config/packages/circuit_breaker.yaml`:
-
-```yaml
-circuit_breaker:
-    # Failure rate threshold to trigger circuit breaker (percentage, 0-100)
-    failure_rate_threshold: 50
-    
-    # Minimum number of requests before triggering circuit breaker
-    min_requests: 10
-    
-    # Window size (number of requests to monitor)
-    window_size: 20
-    
-    # Reset timeout (seconds to wait before trying to recover after circuit open)
-    reset_timeout: 60
-    
-    # Storage adapter type: apcu, redis, memcached
-    adapter: apcu
-    
-    # Storage adapter options
-    adapter_options:
-        redis: ~ # Redis instance or connection parameters
-        memcached: ~ # Memcached instance or connection parameters
-    
-    # Enable circuit breaker
-    enabled: true
-    
-    # Enable HTTP client circuit breaker
-    http_client_enabled: true
-    
-    # HTTP client service name prefix
-    http_client_service_prefix: http_client_
-```
-
 ### Using Attributes
 
 Use circuit breaker attributes on controller methods:

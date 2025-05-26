@@ -34,42 +34,6 @@ return [
 
 ## 快速开始
 
-### 基本配置
-
-创建配置文件 `config/packages/circuit_breaker.yaml`：
-
-```yaml
-circuit_breaker:
-    # 触发熔断的失败率阈值（百分比，0-100）
-    failure_rate_threshold: 50
-    
-    # 触发熔断的最小请求数（收集多少个请求数据后才会触发熔断）
-    min_requests: 10
-    
-    # 窗口大小（监控统计的请求数量）
-    window_size: 20
-    
-    # 重置超时（熔断后多久尝试恢复，单位秒）
-    reset_timeout: 60
-    
-    # 存储适配器类型: apcu, redis, memcached
-    adapter: apcu
-    
-    # 存储适配器选项
-    adapter_options:
-        redis: ~ # 可以配置 Redis 实例或连接参数
-        memcached: ~ # 可以配置 Memcached 实例或连接参数
-    
-    # 是否启用熔断器
-    enabled: true
-    
-    # 是否启用HTTP客户端熔断器
-    http_client_enabled: true
-    
-    # HTTP客户端服务名称前缀
-    http_client_service_prefix: http_client_
-```
-
 ### 使用注解（Attribute）方式
 
 在控制器方法上使用熔断器注解：
