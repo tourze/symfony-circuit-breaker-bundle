@@ -222,7 +222,7 @@ class CircuitBreakerStatusCommand extends Command
                     $failureRate,
                     $calls,
                 ];
-            } catch (\Exception $e) {
+            } catch  (\Throwable $e) {
                 $rows[] = [$name, '无法获取状态', 'N/A', 'N/A'];
             }
         }
@@ -290,7 +290,7 @@ class CircuitBreakerStatusCommand extends Command
                 ['配置项', '值'],
                 $rows
             );
-        } catch (\Exception $e) {
+        } catch  (\Throwable $e) {
             $io->error("无法获取熔断器 '$name' 的状态: " . $e->getMessage());
         }
     }
@@ -303,7 +303,7 @@ class CircuitBreakerStatusCommand extends Command
         try {
             $this->circuitBreakerService->resetCircuit($name);
             $io->success("熔断器 '$name' 的状态已重置");
-        } catch (\Exception $e) {
+        } catch  (\Throwable $e) {
             $io->error("重置熔断器 '$name' 的状态时出错: " . $e->getMessage());
         }
     }
@@ -316,7 +316,7 @@ class CircuitBreakerStatusCommand extends Command
         try {
             $this->circuitBreakerService->forceOpen($name);
             $io->success("熔断器 '$name' 已被强制打开");
-        } catch (\Exception $e) {
+        } catch  (\Throwable $e) {
             $io->error("强制打开熔断器 '$name' 时出错: " . $e->getMessage());
         }
     }
@@ -329,7 +329,7 @@ class CircuitBreakerStatusCommand extends Command
         try {
             $this->circuitBreakerService->forceClose($name);
             $io->success("熔断器 '$name' 已被强制关闭");
-        } catch (\Exception $e) {
+        } catch  (\Throwable $e) {
             $io->error("强制关闭熔断器 '$name' 时出错: " . $e->getMessage());
         }
     }

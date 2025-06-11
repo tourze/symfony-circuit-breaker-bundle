@@ -142,7 +142,7 @@ class ApiClient
             $response = $this->httpClient->request('GET', 'https://api.example.com/data');
             
             return $response->toArray();
-        } catch (\Exception $e) {
+        } catch  (\Throwable $e) {
             // Handle exceptions...
             return [];
         }
@@ -226,7 +226,7 @@ class YourService
             $this->circuitBreaker->markSuccess('your.service');
             
             return $result;
-        } catch (\Exception $e) {
+        } catch  (\Throwable $e) {
             // Mark as failure
             $this->circuitBreaker->markFailure('your.service');
             
