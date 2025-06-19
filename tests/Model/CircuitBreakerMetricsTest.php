@@ -124,8 +124,6 @@ class CircuitBreakerMetricsTest extends TestCase
         $metrics->incrementNotPermittedCalls();
         
         $array = $metrics->toArray();
-        
-        $this->assertIsArray($array);
         $this->assertArrayHasKey('numberOfCalls', $array);
         $this->assertArrayHasKey('numberOfSuccessfulCalls', $array);
         $this->assertArrayHasKey('numberOfFailedCalls', $array);

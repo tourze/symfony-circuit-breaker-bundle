@@ -103,8 +103,6 @@ class CircuitBreakerStateTest extends TestCase
         $state = new CircuitBreakerState(CircuitState::HALF_OPEN, $timestamp, 3);
         
         $array = $state->toArray();
-        
-        $this->assertIsArray($array);
         $this->assertArrayHasKey('state', $array);
         $this->assertArrayHasKey('timestamp', $array);
         $this->assertArrayHasKey('attemptCount', $array);

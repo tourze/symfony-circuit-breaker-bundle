@@ -57,31 +57,31 @@ class CircuitBreakerStatusCommand extends Command
         $config = $this->circuitBreakerService->getConfig();
 
         // 显示配置信息
-        if ($input->getOption('config')) {
+        if ($input->getOption('config') === true) {
             $this->displayConfig($io, $config);
             return Command::SUCCESS;
         }
 
         // 列出所有已知的熔断器
-        if ($input->getOption('list')) {
+        if ($input->getOption('list') === true) {
             $this->listCircuits($io, $config);
             return Command::SUCCESS;
         }
 
         // 如果指定了熔断器名称
-        if ($circuitName) {
+        if ($circuitName !== null) {
             // 执行命令操作
-            if ($input->getOption('reset')) {
+            if ($input->getOption('reset') === true) {
                 $this->resetCircuit($io, $circuitName);
                 return Command::SUCCESS;
             }
 
-            if ($input->getOption('force-open')) {
+            if ($input->getOption('force-open') === true) {
                 $this->forceOpenCircuit($io, $circuitName);
                 return Command::SUCCESS;
             }
 
-            if ($input->getOption('force-close')) {
+            if ($input->getOption('force-close') === true) {
                 $this->forceCloseCircuit($io, $circuitName);
                 return Command::SUCCESS;
             }

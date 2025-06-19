@@ -25,7 +25,7 @@ class CircuitBreakerMetrics
     /**
      * 最近未使用的时间戳
      */
-    private ?int $notPermittedCalls = 0;
+    private int $notPermittedCalls = 0;
 
     /**
      * 增加调用次数

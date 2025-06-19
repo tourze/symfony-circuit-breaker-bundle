@@ -53,8 +53,6 @@ class CircuitBreakerSubscriberTest extends TestCase
     public function testGetSubscribedEvents_returnsCorrectMapping()
     {
         $events = CircuitBreakerSubscriber::getSubscribedEvents();
-        
-        $this->assertIsArray($events);
         $this->assertArrayHasKey('kernel.controller', $events);
         $this->assertEquals(['onKernelController', 10], $events['kernel.controller']);
     }
@@ -132,7 +130,6 @@ class CircuitBreakerSubscriberTest extends TestCase
         
         // 确保控制器已被修改为降级方法
         $fallbackController = $event->getController();
-        $this->assertIsArray($fallbackController);
         $this->assertSame($controllerInstance, $fallbackController[0]);
         $this->assertEquals('fallbackAction', $fallbackController[1]);
     }

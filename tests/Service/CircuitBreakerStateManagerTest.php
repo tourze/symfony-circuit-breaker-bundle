@@ -221,8 +221,6 @@ class CircuitBreakerStateManagerTest extends TestCase
         
         // 获取并验证所有熔断器名称
         $names = $this->stateManager->getAllCircuitNames();
-        
-        $this->assertIsArray($names);
         $this->assertCount(3, $names);
         $this->assertContains('service1', $names);
         $this->assertContains('service2', $names);
@@ -244,7 +242,6 @@ class CircuitBreakerStateManagerTest extends TestCase
         $info = $this->stateManager->getCircuitInfo('service1');
         
         // 验证信息结构
-        $this->assertIsArray($info);
         $this->assertArrayHasKey('name', $info);
         $this->assertArrayHasKey('state', $info);
         $this->assertArrayHasKey('timestamp', $info);
@@ -254,9 +251,7 @@ class CircuitBreakerStateManagerTest extends TestCase
         // 验证具体值
         $this->assertEquals('service1', $info['name']);
         $this->assertEquals(CircuitState::HALF_OPEN->value, $info['state']);
-        $this->assertIsArray($info['metrics']);
-        $this->assertIsArray($info['config']);
-        
+
         // 验证指标信息
         $this->assertEquals(1, $info['metrics']['numberOfCalls']);
         $this->assertEquals(1, $info['metrics']['numberOfSuccessfulCalls']);

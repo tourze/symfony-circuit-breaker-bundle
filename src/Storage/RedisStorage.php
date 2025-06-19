@@ -144,6 +144,6 @@ class RedisStorage implements CircuitBreakerStorageInterface
         $metricsKey = self::KEY_PREFIX_METRICS . $name;
 
         $this->redis->del($stateKey, $metricsKey);
-        $this->redis->sRem(self::KEY_SET_CIRCUITS, $name);
+        $this->redis->srem(self::KEY_SET_CIRCUITS, $name);
     }
 }

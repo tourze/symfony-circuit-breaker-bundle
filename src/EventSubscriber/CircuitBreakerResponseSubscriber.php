@@ -28,7 +28,7 @@ class CircuitBreakerResponseSubscriber implements EventSubscriberInterface
 
     /**
      * @param CircuitBreakerService $circuitBreakerService 熔断器服务
-     * @param LoggerInterface|null $logger 日志记录器
+     * @param LoggerInterface $logger 日志记录器
      */
     public function __construct(
         private readonly CircuitBreakerService $circuitBreakerService,

@@ -61,7 +61,7 @@ class CircuitBreakerHttpClient implements HttpClientInterface
             function () use ($method, $url, $options) {
                 return $this->httpClient->request($method, $url, $options);
             },
-            $this->fallbackFactory ? fn() => ($this->fallbackFactory)($method, $url, $options) : null
+            $this->fallbackFactory !== null ? fn() => ($this->fallbackFactory)($method, $url, $options) : null
         );
     }
 
