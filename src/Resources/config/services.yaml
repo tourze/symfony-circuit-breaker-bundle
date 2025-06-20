@@ -4,11 +4,22 @@ services:
     autowire: true      # Automatically injects dependencies in your services.
     autoconfigure: true # Automatically registers your services as commands, event subscribers, etc.
 
-  Tourze\Symfony\CircuitBreaker\Command\:
-    resource: '../../Command/'
-  Tourze\Symfony\CircuitBreaker\EventSubscriber\:
-    resource: '../../EventSubscriber/'
-  Tourze\Symfony\CircuitBreaker\Service\:
-    resource: '../../Service/'
-  Tourze\Symfony\CircuitBreaker\Storage\:
-    resource: '../../Storage/'
+  # 自动注册所有类
+  Tourze\Symfony\CircuitBreaker\:
+    resource: '../../*'
+    exclude:
+      - '../../DependencyInjection/'
+      - '../../Resources/'
+      - '../../Tests/'
+      - '../../CircuitBreakerBundle.php'
+
+  # 存储服务配置
+  Tourze\Symfony\CircuitBreaker\Storage\ChainedStorage:
+    arguments:
+      $redisStorage: '@Tourze\Symfony\CircuitBreaker\Storage\RedisAtomicStorage'
+      $doctrineStorage: '@Tourze\Symfony\CircuitBreaker\Storage\DoctrineStorage'
+      $memoryStorage: '@Tourze\Symfony\CircuitBreaker\Storage\MemoryStorage'
+
+  # 主要存储服务别名
+  Tourze\Symfony\CircuitBreaker\Storage\CircuitBreakerStorageInterface:
+    alias: Tourze\Symfony\CircuitBreaker\Storage\ChainedStorage

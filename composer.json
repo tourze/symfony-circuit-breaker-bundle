@@ -6,6 +6,7 @@
   "require": {
     "php": "^8.1",
     "ext-redis": "*",
+    "doctrine/dbal": "^4.0",
     "psr/log": "^3|^2|^1",
     "symfony/cache": "^6.4",
     "symfony/config": "^6.4",
@@ -13,11 +14,15 @@
     "symfony/dependency-injection": "^6.4",
     "symfony/event-dispatcher": "^6.4",
     "symfony/event-dispatcher-contracts": "^2.5 | ^3",
+    "symfony/framework-bundle": "^6.4",
     "symfony/http-client-contracts": "^2.5 | ^3.0",
     "symfony/http-foundation": "^6.4",
     "symfony/http-kernel": "^6.4",
+    "symfony/routing": "^6.4",
     "symfony/yaml": "^6.4 || ^7.1",
-    "tourze/enum-extra": "0.1.*"
+    "tourze/doctrine-dedicated-connection-bundle": "0.0.*",
+    "tourze/enum-extra": "0.1.*",
+    "tourze/redis-dedicated-connection-bundle": "0.0.*"
   },
   "require-dev": {
     "maglnet/composer-require-checker": "^4",

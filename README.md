@@ -2,17 +2,17 @@
 
 [![Latest Version](https://img.shields.io/packagist/v/tourze/symfony-circuit-breaker-bundle.svg?style=flat-square)](https://packagist.org/packages/tourze/symfony-circuit-breaker-bundle)
 
-Symfony熔断器Bundle，基于 [ackintosh/ganesha](https://packagist.org/packages/ackintosh/ganesha) 实现，为Symfony应用提供熔断器功能，帮助您构建更健壮的应用。
+Symfony熔断器Bundle，为Symfony应用提供高性能、可扩展的熔断器功能，支持单机和集群环境，帮助您构建更健壮的微服务应用。
 
 ## 功能特性
 
-- 支持多种熔断器策略（失败率、超时等）
-- 支持多种存储适配器（APCu、Redis、Memcached）
-- 提供简单易用的注解（Attribute）方式使用熔断器
-- 集成Symfony HTTP客户端熔断支持
-- 自定义服务降级处理
-- 完全可配置的熔断器行为
-- 命令行工具查看和管理熔断器状态
+- **高性能存储**：使用Redis原子操作，支持滑动窗口统计
+- **多层故障转移**：Redis → Doctrine → Memory，确保熔断器始终可用
+- **多种熔断策略**：失败率策略、慢调用策略、连续失败策略
+- **集群支持**：基于共享存储的状态同步，支持分布式部署
+- **监控接口**：提供JSON格式的REST API查看熔断器状态
+- **灵活配置**：纯环境变量配置，支持全局和特定熔断器配置
+- **命令行工具**：查看状态、重置、强制开关等操作
 
 ## 安装
 

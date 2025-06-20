@@ -15,17 +15,20 @@ class CircuitBreakerConfigService
         // 从环境变量中读取默认配置
         $defaultConfig = [
             'failure_rate_threshold' => (int)($_ENV['CIRCUIT_BREAKER_FAILURE_RATE_THRESHOLD'] ?? 50),
-            'minimum_number_of_calls' => (int)($_ENV['CIRCUIT_BREAKER_MINIMUM_NUMBER_OF_CALLS'] ?? 100),
+            'minimum_number_of_calls' => (int)($_ENV['CIRCUIT_BREAKER_MINIMUM_NUMBER_OF_CALLS'] ?? 10),
             'permitted_number_of_calls_in_half_open_state' => (int)($_ENV['CIRCUIT_BREAKER_PERMITTED_NUMBER_OF_CALLS_IN_HALF_OPEN_STATE'] ?? 10),
             'wait_duration_in_open_state' => (int)($_ENV['CIRCUIT_BREAKER_WAIT_DURATION_IN_OPEN_STATE'] ?? 60),
+            'sliding_window_size' => (int)($_ENV['CIRCUIT_BREAKER_SLIDING_WINDOW_SIZE'] ?? 60),
+            'slow_call_duration_threshold' => (float)($_ENV['CIRCUIT_BREAKER_SLOW_CALL_THRESHOLD'] ?? 1000),
+            'slow_call_rate_threshold' => (float)($_ENV['CIRCUIT_BREAKER_SLOW_CALL_RATE_THRESHOLD'] ?? 50),
+            'strategy' => $_ENV['CIRCUIT_BREAKER_STRATEGY'] ?? 'failure_rate',
             'ignore_exceptions' => $this->parseExceptionsList($_ENV['CIRCUIT_BREAKER_IGNORE_EXCEPTIONS'] ?? ''),
             'record_exceptions' => $this->parseExceptionsList($_ENV['CIRCUIT_BREAKER_RECORD_EXCEPTIONS'] ?? '')
         ];
         
         // 获取特定熔断器配置
-        // 由于环境变量不能很好地支持动态键值，我们可以使用特定命名约定
-        // 例如：CIRCUIT_BREAKER_CIRCUIT_{NAME}_{CONFIG_KEY}
-        $prefix = 'CIRCUIT_BREAKER_CIRCUIT_' . strtoupper($name) . '_';
+        // 使用特定命名约定：CIRCUIT_{NAME}_{CONFIG_KEY}
+        $prefix = 'CIRCUIT_' . strtoupper(str_replace('.', '_', $name)) . '_';
         $specificConfig = [];
         
         foreach ($defaultConfig as $key => $value) {
@@ -33,6 +36,10 @@ class CircuitBreakerConfigService
             if (isset($_ENV[$envKey])) {
                 if (in_array($key, ['ignore_exceptions', 'record_exceptions'])) {
                     $specificConfig[$key] = $this->parseExceptionsList($_ENV[$envKey]);
+                } elseif ($key === 'strategy') {
+                    $specificConfig[$key] = $_ENV[$envKey];
+                } elseif (is_float($value)) {
+                    $specificConfig[$key] = (float)$_ENV[$envKey];
                 } else {
                     $specificConfig[$key] = (int)$_ENV[$envKey];
                 }
@@ -101,6 +108,14 @@ class CircuitBreakerConfigService
         }
         
         $config['circuits'] = $circuits;
+        
+        // 存储配置
+        $config['storage'] = [
+            'primary' => $_ENV['CIRCUIT_BREAKER_STORAGE_PRIMARY'] ?? 'redis',
+            'fallback' => $_ENV['CIRCUIT_BREAKER_STORAGE_FALLBACK'] ?? 'doctrine',
+            'redis_key_prefix' => $_ENV['CIRCUIT_BREAKER_REDIS_KEY_PREFIX'] ?? 'circuit:',
+            'doctrine_table_prefix' => $_ENV['CIRCUIT_BREAKER_DOCTRINE_TABLE_PREFIX'] ?? 'circuit_breaker_',
+        ];
         
         return $config;
     }

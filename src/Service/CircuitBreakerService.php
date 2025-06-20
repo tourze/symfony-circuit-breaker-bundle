@@ -7,7 +7,7 @@ use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Tourze\Symfony\CircuitBreaker\Event\CircuitFailureEvent;
 use Tourze\Symfony\CircuitBreaker\Event\CircuitSuccessEvent;
 use Tourze\Symfony\CircuitBreaker\Exception\CircuitOpenException;
-use Tourze\Symfony\CircuitBreaker\Storage\CircuitBreakerStorageInterface;
+use Tourze\Symfony\CircuitBreaker\Strategy\StrategyManager;
 
 /**
  * 熔断器服务
@@ -17,23 +17,22 @@ use Tourze\Symfony\CircuitBreaker\Storage\CircuitBreakerStorageInterface;
 class CircuitBreakerService
 {
     public function __construct(
-        private readonly CircuitBreakerStorageInterface $storage,
         private readonly CircuitBreakerConfigService $configService,
-        private readonly CircuitBreakerStateManager $stateManager,
+        private readonly StateManager $stateManager,
+        private readonly MetricsCollector $metricsCollector,
+        private readonly StrategyManager $strategyManager,
         private readonly EventDispatcherInterface $eventDispatcher,
-        private readonly LoggerInterface $logger,
+        private readonly LoggerInterface $logger
     ) {
     }
-
 
     /**
      * 检查熔断器是否允许请求
      */
     public function isAllowed(string $name): bool
     {
-        $circuitConfig = $this->configService->getCircuitConfig($name);
-        $state = $this->storage->getState($name);
-        $metrics = $this->storage->getMetrics($name);
+        $config = $this->configService->getCircuitConfig($name);
+        $state = $this->stateManager->getState($name);
 
         // 如果处于关闭状态，允许请求
         if ($state->isClosed()) {
@@ -42,24 +41,19 @@ class CircuitBreakerService
 
         // 如果处于开启状态
         if ($state->isOpen()) {
-            $waitDuration = $circuitConfig['wait_duration_in_open_state'];
-            $elapsedTime = time() - $state->getTimestamp();
-
-            // 如果已经过了等待时间，并且启用了自动转换到半开状态
-            if ($elapsedTime >= $waitDuration) {
-                $this->stateManager->setHalfOpen($name);
-                // 允许第一个请求通过
+            // 检查是否应该转换到半开状态
+            if ($this->stateManager->checkForHalfOpenTransition($name, $config['wait_duration_in_open_state'])) {
                 return true;
             }
 
             // 否则拒绝请求
-            $this->stateManager->incrementNotPermittedCalls($name);
+            $this->metricsCollector->recordNotPermitted($name);
             return false;
         }
 
         // 如果处于半开状态，检查允许的调用次数
         if ($state->isHalfOpen()) {
-            $permittedCalls = $circuitConfig['permitted_number_of_calls_in_half_open_state'];
+            $permittedCalls = $config['permitted_number_of_calls_in_half_open_state'];
             $currentAttempts = $state->getAttemptCount();
 
             if ($currentAttempts < $permittedCalls) {
@@ -68,7 +62,7 @@ class CircuitBreakerService
             }
 
             // 超过允许的调用次数，拒绝请求
-            $this->stateManager->incrementNotPermittedCalls($name);
+            $this->metricsCollector->recordNotPermitted($name);
             return false;
         }
 
@@ -78,138 +72,78 @@ class CircuitBreakerService
     /**
      * 记录成功
      */
-    public function recordSuccess(string $name): void
+    public function recordSuccess(string $name, float $duration = 0.0): void
     {
-        $state = $this->storage->getState($name);
-        $metrics = $this->storage->getMetrics($name);
+        $state = $this->stateManager->getState($name);
+        $config = $this->configService->getCircuitConfig($name);
         
-        $metrics->incrementCalls();
-        $metrics->incrementSuccessfulCalls();
-        
-        // 如果处于半开状态，检查是否可以关闭熔断器
-        if ($state->isHalfOpen()) {
-            $circuitConfig = $this->configService->getCircuitConfig($name);
-            $permittedCalls = $circuitConfig['permitted_number_of_calls_in_half_open_state'];
-            $successfulCalls = $metrics->getNumberOfSuccessfulCalls();
-            $totalCalls = $metrics->getNumberOfCalls();
-            
-            // 如果累计的成功比例足够高，关闭熔断器
-            if ($totalCalls >= $permittedCalls && 
-                $successfulCalls > 0 && 
-                (($successfulCalls / $totalCalls) * 100) >= (100 - ($circuitConfig['failure_rate_threshold'] ?? 50))
-            ) {
-                $this->stateManager->setClosed($name);
-                
-                // 重置指标
-                $metrics->reset();
-            }
-        }
-
-        $this->storage->saveMetrics($name, $metrics);
+        // 记录成功调用
+        $this->metricsCollector->recordSuccess($name, $duration);
 
         // 触发成功事件
         $this->eventDispatcher->dispatch(new CircuitSuccessEvent($name));
+
+        // 如果处于半开状态，检查是否可以关闭熔断器
+        if ($state->isHalfOpen()) {
+            $strategy = $this->strategyManager->getStrategyForConfig($config);
+            $metrics = $this->metricsCollector->getSnapshot($name, $config['sliding_window_size']);
+            
+            if ($strategy->shouldClose($metrics, $config)) {
+                $this->stateManager->setClosed($name);
+            }
+        }
     }
 
     /**
      * 记录失败
      */
-    public function recordFailure(string $name, \Throwable $throwable): void
+    public function recordFailure(string $name, \Throwable $throwable, float $duration = 0.0): void
     {
-        $circuitConfig = $this->configService->getCircuitConfig($name);
-        $state = $this->storage->getState($name);
-        $metrics = $this->storage->getMetrics($name);
-        
-        $metrics->incrementCalls();
-        $metrics->incrementFailedCalls();
-        
+        $state = $this->stateManager->getState($name);
+        $config = $this->configService->getCircuitConfig($name);
+
+        // 检查是否应该忽略异常
+        if ($this->metricsCollector->shouldIgnoreException($name, $throwable)) {
+            $this->logger->debug('Ignoring exception for circuit breaker', [
+                'circuit' => $name,
+                'exception' => get_class($throwable),
+            ]);
+            $this->recordSuccess($name, $duration);
+            return;
+        }
+
+        // 检查是否应该记录异常
+        if (!$this->metricsCollector->shouldRecordException($name, $throwable)) {
+            $this->logger->debug('Exception not in record list for circuit breaker', [
+                'circuit' => $name,
+                'exception' => get_class($throwable),
+            ]);
+            $this->recordSuccess($name, $duration);
+            return;
+        }
+
+        // 记录失败调用
+        $this->metricsCollector->recordFailure($name, $duration, $throwable);
+
         // 触发失败事件
         $this->eventDispatcher->dispatch(new CircuitFailureEvent($name, $throwable));
 
-        // 如果在异常忽略列表中，不计入失败
-        if (isset($circuitConfig['ignore_exceptions']) &&
-            !empty($circuitConfig['ignore_exceptions'])
-        ) {
-            foreach ($circuitConfig['ignore_exceptions'] as $ignoredException) {
-                if ($throwable instanceof $ignoredException) {
-                    $this->logger->debug('忽略异常，不计入熔断失败: {exception}', [
-                        'circuit' => $name,
-                        'exception' => get_class($throwable),
-                    ]);
-
-                    // 减少失败计数
-                    $metrics->incrementSuccessfulCalls();
-
-                    $this->storage->saveMetrics($name, $metrics);
-                    return;
-                }
-            }
-        }
-
-        // 如果在异常记录列表中或列表为空，计入失败
-        $shouldRecordFailure = true;
-        if (isset($circuitConfig['record_exceptions']) && 
-            !empty($circuitConfig['record_exceptions'])
-        ) {
-            $shouldRecordFailure = false;
-            foreach ($circuitConfig['record_exceptions'] as $recordedException) {
-                if ($throwable instanceof $recordedException) {
-                    $shouldRecordFailure = true;
-                    break;
-                }
-            }
-        }
-        
-        if (!$shouldRecordFailure) {
-            $this->logger->debug('异常不在记录列表中，不计入熔断失败: {exception}', [
-                'circuit' => $name,
-                'exception' => get_class($throwable),
-            ]);
-            
-            // 减少失败计数
-            $metrics->incrementSuccessfulCalls();
-            
-            $this->storage->saveMetrics($name, $metrics);
-            return;
-        }
-        
         // 如果处于半开状态，任何失败都会导致再次打开熔断器
         if ($state->isHalfOpen()) {
-            $this->stateManager->setOpen($name, 100.0);
-            
-            $this->logger->warning('熔断器从半开状态重新打开: {circuit}', [
-                'circuit' => $name,
-                'exception' => get_class($throwable),
-                'message' => $throwable->getMessage(),
-            ]);
-            
-            $metrics->reset();
-            $this->storage->saveMetrics($name, $metrics);
+            $metrics = $this->metricsCollector->getSnapshot($name, $config['sliding_window_size']);
+            $this->stateManager->setOpen($name, $metrics->getFailureRate());
             return;
         }
-        
+
         // 如果处于关闭状态，检查是否应该打开熔断器
         if ($state->isClosed()) {
-            $failureRateThreshold = $circuitConfig['failure_rate_threshold'];
-            $minimumCalls = $circuitConfig['minimum_number_of_calls'];
-            $totalCalls = $metrics->getNumberOfCalls();
-            $failureRate = $metrics->getFailureRate();
+            $strategy = $this->strategyManager->getStrategyForConfig($config);
+            $metrics = $this->metricsCollector->getSnapshot($name, $config['sliding_window_size']);
             
-            if ($totalCalls >= $minimumCalls && $failureRate >= $failureRateThreshold) {
-                $this->stateManager->setOpen($name, $failureRate);
-                
-                $this->logger->warning('熔断器打开: {circuit}, 失败率: {rate}%', [
-                    'circuit' => $name,
-                    'rate' => round($failureRate, 2),
-                    'calls' => $totalCalls,
-                    'failures' => $metrics->getNumberOfFailedCalls(),
-                ]);
-                
-                $metrics->reset();
+            if ($strategy->shouldOpen($metrics, $config)) {
+                $this->stateManager->setOpen($name, $metrics->getFailureRate());
             }
         }
-        
-        $this->storage->saveMetrics($name, $metrics);
     }
 
     /**
@@ -225,7 +159,7 @@ class CircuitBreakerService
     public function execute(string $name, callable $operation, ?callable $fallback = null): mixed
     {
         if (!$this->isAllowed($name)) {
-            $this->logger->debug('熔断器拒绝请求: {circuit}', ['circuit' => $name]);
+            $this->logger->debug('Circuit breaker rejected request', ['circuit' => $name]);
             
             if ($fallback !== null) {
                 return $fallback();
@@ -233,13 +167,17 @@ class CircuitBreakerService
             
             throw new CircuitOpenException($name);
         }
+
+        $startTime = microtime(true);
         
         try {
             $result = $operation();
-            $this->recordSuccess($name);
+            $duration = (microtime(true) - $startTime) * 1000; // 转换为毫秒
+            $this->recordSuccess($name, $duration);
             return $result;
         } catch (\Throwable $throwable) {
-            $this->recordFailure($name, $throwable);
+            $duration = (microtime(true) - $startTime) * 1000; // 转换为毫秒
+            $this->recordFailure($name, $throwable, $duration);
             
             if ($fallback !== null) {
                 return $fallback();
@@ -250,19 +188,12 @@ class CircuitBreakerService
     }
 
     /**
-     * 获取熔断器状态信息
-     */
-    public function getCircuitInfo(string $name): array
-    {
-        return $this->stateManager->getCircuitInfo($name);
-    }
-
-    /**
      * 重置熔断器状态
      */
     public function resetCircuit(string $name): void
     {
         $this->stateManager->resetCircuit($name);
+        $this->metricsCollector->reset($name);
     }
 
     /**
@@ -282,20 +213,32 @@ class CircuitBreakerService
     }
     
     /**
-     * 获取当前配置
-     */
-    public function getConfig(): array
-    {
-        return $this->configService->getConfig();
-    }
-    
-    /**
-     * 获取所有熔断器名称
+     * 检查是否被允许（兼容旧版本）
      * 
-     * @return array<string> 熔断器名称列表
+     * @deprecated 使用 isAllowed() 代替
      */
-    public function getAllCircuitNames(): array
+    public function isAvailable(string $name): bool
     {
-        return $this->stateManager->getAllCircuitNames();
+        return $this->isAllowed($name);
+    }
+
+    /**
+     * 标记成功（兼容旧版本）
+     * 
+     * @deprecated 使用 recordSuccess() 代替
+     */
+    public function markSuccess(string $name): void
+    {
+        $this->recordSuccess($name);
+    }
+
+    /**
+     * 标记失败（兼容旧版本）
+     * 
+     * @deprecated 使用 recordFailure() 代替
+     */
+    public function markFailure(string $name): void
+    {
+        $this->recordFailure($name, new \RuntimeException('Manual failure mark'));
     }
 } 
