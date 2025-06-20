@@ -15,26 +15,24 @@ class ConsecutiveFailureStrategy implements CircuitBreakerStrategyInterface
      * @var array<string, int> 连续失败计数
      */
     private array $consecutiveFailures = [];
+    
+    /**
+     * @var string|null 当前评估的熔断器名称
+     */
+    private ?string $currentCircuitName = null;
 
     public function shouldOpen(MetricsSnapshot $metrics, array $config): bool
     {
-        // 这个策略需要更复杂的实现，需要跟踪连续失败
-        // 暂时使用简化版本：如果最近N次调用全部失败
         $consecutiveFailureThreshold = $config['consecutive_failure_threshold'] ?? 5;
         
-        // 如果总调用次数不足，不开启
-        if ($metrics->getTotalCalls() < $consecutiveFailureThreshold) {
+        // 如果没有设置当前熔断器名称，无法评估
+        if ($this->currentCircuitName === null) {
             return false;
         }
-
-        // 如果最近的调用全部失败（简化判断）
-        // 在实际实现中，需要存储调用序列
-        if ($metrics->getTotalCalls() === $metrics->getFailedCalls() && 
-            $metrics->getTotalCalls() >= $consecutiveFailureThreshold) {
-            return true;
-        }
-
-        return false;
+        
+        // 检查当前熔断器的连续失败次数
+        $count = $this->consecutiveFailures[$this->currentCircuitName] ?? 0;
+        return $count >= $consecutiveFailureThreshold;
     }
 
     public function shouldClose(MetricsSnapshot $metrics, array $config): bool
@@ -61,6 +59,14 @@ class ConsecutiveFailureStrategy implements CircuitBreakerStrategyInterface
             $this->consecutiveFailures[$name] = ($this->consecutiveFailures[$name] ?? 0) + 1;
         }
     }
+    
+    /**
+     * 设置当前评估的熔断器名称
+     */
+    public function setCurrentCircuitName(string $name): void
+    {
+        $this->currentCircuitName = $name;
+    }
 
     /**
      * 获取连续失败次数
@@ -68,5 +74,13 @@ class ConsecutiveFailureStrategy implements CircuitBreakerStrategyInterface
     public function getConsecutiveFailures(string $name): int
     {
         return $this->consecutiveFailures[$name] ?? 0;
+    }
+
+    /**
+     * 重置所有计数器
+     */
+    public function reset(): void
+    {
+        $this->consecutiveFailures = [];
     }
 }

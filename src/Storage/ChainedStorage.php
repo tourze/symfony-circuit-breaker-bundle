@@ -115,7 +115,16 @@ private const RETRY_AFTER = 60;
             unset($this->lastFailureTime[$storageClass]);
         }
 
-        return true;
+        // 检查存储是否可用
+        try {
+            return $storage->isAvailable();
+        } catch (\Throwable $e) {
+            $this->logger->warning('Storage availability check failed', [
+                'storage' => $storageClass,
+                'error' => $e->getMessage(),
+            ]);
+            return false;
+        }
     }
 
     /**
@@ -171,21 +180,43 @@ private const RETRY_AFTER = 60;
 
     public function getAllCircuitNames(): array
     {
-        return $this->executeWithFallback(
-            fn(CircuitBreakerStorageInterface $storage) => $storage->getAllCircuitNames(),
-            []
-        );
+        $allNames = [];
+        
+        // 从所有可用的存储中收集熔断器名称
+        foreach ($this->storages as $storage) {
+            if (!$this->isStorageHealthy($storage)) {
+                continue;
+            }
+            
+            try {
+                $names = $storage->getAllCircuitNames();
+                $allNames = array_merge($allNames, $names);
+            } catch (\Throwable $e) {
+                $this->logger->warning('Failed to get circuit names from storage', [
+                    'storage' => get_class($storage),
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+        
+        // 去重并返回
+        return array_unique($allNames);
     }
 
     public function deleteCircuit(string $name): void
     {
-        $this->executeWithFallback(
-            function(CircuitBreakerStorageInterface $storage) use ($name) {
+        // 在所有存储上执行删除，不管是否可用
+        foreach ($this->storages as $storage) {
+            try {
                 $storage->deleteCircuit($name);
-                return true;
-            },
-            null
-        );
+            } catch (\Throwable $e) {
+                $this->logger->warning('Failed to delete circuit from storage', [
+                    'storage' => get_class($storage),
+                    'circuit' => $name,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
     }
 
     public function acquireLock(string $name, string $token, int $ttl): bool
@@ -208,7 +239,7 @@ private const RETRY_AFTER = 60;
     {
         // 只要有一个存储可用就返回true
         foreach ($this->storages as $storage) {
-            if ($this->isStorageHealthy($storage) && $storage->isAvailable()) {
+            if ($this->isStorageHealthy($storage)) {
                 return true;
             }
         }

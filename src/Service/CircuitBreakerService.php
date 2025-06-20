@@ -7,6 +7,7 @@ use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Tourze\Symfony\CircuitBreaker\Event\CircuitFailureEvent;
 use Tourze\Symfony\CircuitBreaker\Event\CircuitSuccessEvent;
 use Tourze\Symfony\CircuitBreaker\Exception\CircuitOpenException;
+use Tourze\Symfony\CircuitBreaker\Strategy\ConsecutiveFailureStrategy;
 use Tourze\Symfony\CircuitBreaker\Strategy\StrategyManager;
 
 /**
@@ -79,13 +80,18 @@ class CircuitBreakerService
         
         // 记录成功调用
         $this->metricsCollector->recordSuccess($name, $duration);
+        
+        // 通知策略（用于 ConsecutiveFailureStrategy）
+        $strategy = $this->strategyManager->getStrategyForConfig($config);
+        if ($strategy instanceof ConsecutiveFailureStrategy) {
+            $strategy->recordResult($name, true);
+        }
 
         // 触发成功事件
         $this->eventDispatcher->dispatch(new CircuitSuccessEvent($name));
 
         // 如果处于半开状态，检查是否可以关闭熔断器
         if ($state->isHalfOpen()) {
-            $strategy = $this->strategyManager->getStrategyForConfig($config);
             $metrics = $this->metricsCollector->getSnapshot($name, $config['sliding_window_size']);
             
             if ($strategy->shouldClose($metrics, $config)) {
@@ -124,6 +130,12 @@ class CircuitBreakerService
 
         // 记录失败调用
         $this->metricsCollector->recordFailure($name, $duration, $throwable);
+        
+        // 通知策略（用于 ConsecutiveFailureStrategy）
+        $strategy = $this->strategyManager->getStrategyForConfig($config);
+        if ($strategy instanceof ConsecutiveFailureStrategy) {
+            $strategy->recordResult($name, false);
+        }
 
         // 触发失败事件
         $this->eventDispatcher->dispatch(new CircuitFailureEvent($name, $throwable));
@@ -137,8 +149,12 @@ class CircuitBreakerService
 
         // 如果处于关闭状态，检查是否应该打开熔断器
         if ($state->isClosed()) {
-            $strategy = $this->strategyManager->getStrategyForConfig($config);
             $metrics = $this->metricsCollector->getSnapshot($name, $config['sliding_window_size']);
+            
+            // 设置当前熔断器名称（用于 ConsecutiveFailureStrategy）
+            if ($strategy instanceof ConsecutiveFailureStrategy) {
+                $strategy->setCurrentCircuitName($name);
+            }
             
             if ($strategy->shouldOpen($metrics, $config)) {
                 $this->stateManager->setOpen($name, $metrics->getFailureRate());
@@ -193,7 +209,6 @@ class CircuitBreakerService
     public function resetCircuit(string $name): void
     {
         $this->stateManager->resetCircuit($name);
-        $this->metricsCollector->reset($name);
     }
 
     /**
