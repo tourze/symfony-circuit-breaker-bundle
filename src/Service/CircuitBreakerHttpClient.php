@@ -23,7 +23,7 @@ class CircuitBreakerHttpClient implements HttpClientInterface
     
     /**
      * 降级响应工厂（可选）
-     * 
+     *
      * @var callable|null
      */
     private $fallbackFactory;

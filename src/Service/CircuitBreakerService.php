@@ -229,7 +229,7 @@ class CircuitBreakerService
     
     /**
      * 检查是否被允许（兼容旧版本）
-     * 
+     *
      * @deprecated 使用 isAllowed() 代替
      */
     public function isAvailable(string $name): bool
@@ -239,7 +239,7 @@ class CircuitBreakerService
 
     /**
      * 标记成功（兼容旧版本）
-     * 
+     *
      * @deprecated 使用 recordSuccess() 代替
      */
     public function markSuccess(string $name): void
@@ -249,7 +249,7 @@ class CircuitBreakerService
 
     /**
      * 标记失败（兼容旧版本）
-     * 
+     *
      * @deprecated 使用 recordFailure() 代替
      */
     public function markFailure(string $name): void

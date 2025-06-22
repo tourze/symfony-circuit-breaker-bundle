@@ -13,7 +13,7 @@ interface CircuitBreakerStrategyInterface
 {
     /**
      * 判断是否应该打开熔断器
-     * 
+     *
      * @param MetricsSnapshot $metrics 当前指标快照
      * @param array<string, mixed> $config 熔断器配置
      * @return bool 是否应该打开
@@ -22,7 +22,7 @@ interface CircuitBreakerStrategyInterface
 
     /**
      * 判断是否应该关闭熔断器
-     * 
+     *
      * @param MetricsSnapshot $metrics 当前指标快照
      * @param array<string, mixed> $config 熔断器配置
      * @return bool 是否应该关闭

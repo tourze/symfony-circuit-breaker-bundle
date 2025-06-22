@@ -20,7 +20,7 @@ interface CircuitBreakerStorageInterface
 
     /**
      * 保存熔断器状态
-     * 
+     *
      * @return bool 是否保存成功
      */
     public function saveState(string $name, CircuitBreakerState $state): bool;
@@ -32,7 +32,7 @@ interface CircuitBreakerStorageInterface
 
     /**
      * 获取指标快照
-     * 
+     *
      * @param int $windowSize 时间窗口大小（秒）
      */
     public function getMetricsSnapshot(string $name, int $windowSize): MetricsSnapshot;
@@ -51,7 +51,7 @@ interface CircuitBreakerStorageInterface
 
     /**
      * 获取分布式锁
-     * 
+     *
      * @param string $name 熔断器名称
      * @param string $token 锁令牌
      * @param int $ttl 锁过期时间（秒）
@@ -61,7 +61,7 @@ interface CircuitBreakerStorageInterface
 
     /**
      * 释放分布式锁
-     * 
+     *
      * @param string $name 熔断器名称
      * @param string $token 锁令牌
      * @return bool 是否释放成功

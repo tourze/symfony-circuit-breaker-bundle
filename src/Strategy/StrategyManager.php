@@ -66,7 +66,7 @@ class StrategyManager
 
     /**
      * 获取所有可用策略名称
-     * 
+     *
      * @return array<string>
      */
     public function getAvailableStrategies(): array

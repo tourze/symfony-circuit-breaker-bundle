@@ -47,7 +47,7 @@ class CircuitBreakerResponseSubscriber implements EventSubscriberInterface
 
     /**
      * 控制器调用前，记录当前请求使用的熔断器名称
-     * 
+     *
      * @throws ReflectionException
      */
     public function onKernelController(ControllerEvent $event): void
