@@ -19,20 +19,30 @@ use Tourze\Symfony\CircuitBreaker\Model\MetricsSnapshot;
 #[WithDedicatedConnection('circuit_breaker')]
 class DoctrineStorage implements CircuitBreakerStorageInterface
 {
-    private const STATE_TABLE = 'circuit_breaker_states';
+    private const STATE_TABLE = 'circuit_breaker_state';
     private const METRICS_TABLE = 'circuit_breaker_metrics';
     private const LOCK_TABLE = 'circuit_breaker_locks';
+
+    private bool $tablesChecked = false;
 
     public function __construct(
         private readonly Connection $connection,
         private readonly LoggerInterface $logger = new NullLogger()
     ) {
-        $this->ensureTablesExist();
     }
 
     private function ensureTablesExist(): void
     {
+        if ($this->tablesChecked) {
+            return;
+        }
+
         try {
+            $schemaManager = $this->connection->createSchemaManager();
+            if ($schemaManager->tablesExist([self::STATE_TABLE, self::METRICS_TABLE, self::LOCK_TABLE])) {
+                $this->tablesChecked = true;
+                return;
+            }
             // 创建状态表
             $this->connection->executeStatement('
                 CREATE TABLE IF NOT EXISTS ' . self::STATE_TABLE . ' (
@@ -67,6 +77,8 @@ class DoctrineStorage implements CircuitBreakerStorageInterface
                     INDEX idx_expire_at (expire_at)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
             ');
+
+            $this->tablesChecked = true;
         } catch (Exception $e) {
             $this->logger->warning('Failed to ensure tables exist', [
                 'error' => $e->getMessage(),
@@ -76,6 +88,8 @@ class DoctrineStorage implements CircuitBreakerStorageInterface
 
     public function saveState(string $name, CircuitBreakerState $state): bool
     {
+        $this->ensureTablesExist();
+        
         try {
             $sql = '
                 INSERT INTO ' . self::STATE_TABLE . ' (name, state, timestamp, attempt_count, updated_at)
@@ -107,9 +121,11 @@ class DoctrineStorage implements CircuitBreakerStorageInterface
 
     public function getState(string $name): CircuitBreakerState
     {
+        $this->ensureTablesExist();
+        
         try {
             $sql = 'SELECT state, timestamp, attempt_count FROM ' . self::STATE_TABLE . ' WHERE name = :name';
-            $result = $this->connection->fetchAssociative($sql, ['name' => $name]);
+            $result = $this->connection->executeQuery($sql, ['name' => $name])->fetchAssociative();
 
             if ($result === false) {
                 return new CircuitBreakerState();
@@ -131,6 +147,8 @@ class DoctrineStorage implements CircuitBreakerStorageInterface
 
     public function recordCall(string $name, CallResult $result): void
     {
+        $this->ensureTablesExist();
+        
         try {
             $sql = '
                 INSERT INTO ' . self::METRICS_TABLE . ' (name, success, duration, timestamp)
@@ -178,6 +196,8 @@ class DoctrineStorage implements CircuitBreakerStorageInterface
 
     public function getMetricsSnapshot(string $name, int $windowSize): MetricsSnapshot
     {
+        $this->ensureTablesExist();
+        
         try {
             $windowStart = time() - $windowSize;
             $slowCallThreshold = (float)($_ENV['CIRCUIT_BREAKER_SLOW_CALL_THRESHOLD'] ?? 1000);
@@ -193,11 +213,11 @@ class DoctrineStorage implements CircuitBreakerStorageInterface
                 WHERE name = :name AND timestamp > :window_start
             ';
 
-            $result = $this->connection->fetchAssociative($sql, [
+            $result = $this->connection->executeQuery($sql, [
                 'name' => $name,
                 'window_start' => $windowStart,
                 'slow_threshold' => $slowCallThreshold,
-            ]);
+            ])->fetchAssociative();
 
             if ($result === false) {
                 return new MetricsSnapshot();
@@ -223,9 +243,11 @@ class DoctrineStorage implements CircuitBreakerStorageInterface
 
     public function getAllCircuitNames(): array
     {
+        $this->ensureTablesExist();
+        
         try {
             $sql = 'SELECT DISTINCT name FROM ' . self::STATE_TABLE;
-            $names = $this->connection->fetchFirstColumn($sql);
+            $names = $this->connection->executeQuery($sql)->fetchFirstColumn();
             return $names ?: [];
         } catch (Exception $e) {
             $this->logger->error('Failed to get circuit names from database', [
@@ -237,6 +259,8 @@ class DoctrineStorage implements CircuitBreakerStorageInterface
 
     public function deleteCircuit(string $name): void
     {
+        $this->ensureTablesExist();
+        
         try {
             $this->connection->executeStatement(
                 'DELETE FROM ' . self::STATE_TABLE . ' WHERE name = :name',
@@ -244,6 +268,10 @@ class DoctrineStorage implements CircuitBreakerStorageInterface
             );
             $this->connection->executeStatement(
                 'DELETE FROM ' . self::METRICS_TABLE . ' WHERE name = :name',
+                ['name' => $name]
+            );
+            $this->connection->executeStatement(
+                'DELETE FROM ' . self::LOCK_TABLE . ' WHERE name = :name',
                 ['name' => $name]
             );
         } catch (Exception $e) {
@@ -256,6 +284,8 @@ class DoctrineStorage implements CircuitBreakerStorageInterface
 
     public function acquireLock(string $name, string $token, int $ttl): bool
     {
+        $this->ensureTablesExist();
+        
         try {
             $expireAt = time() + $ttl;
 
@@ -277,7 +307,7 @@ class DoctrineStorage implements CircuitBreakerStorageInterface
 
             // 检查是否获取成功
             $checkSql = 'SELECT token FROM ' . self::LOCK_TABLE . ' WHERE name = :name';
-            $currentToken = $this->connection->fetchOne($checkSql, ['name' => $name]);
+            $currentToken = $this->connection->executeQuery($checkSql, ['name' => $name])->fetchOne();
 
             return $currentToken === $token;
         } catch (Exception $e) {
@@ -291,6 +321,8 @@ class DoctrineStorage implements CircuitBreakerStorageInterface
 
     public function releaseLock(string $name, string $token): bool
     {
+        $this->ensureTablesExist();
+        
         try {
             $sql = 'DELETE FROM ' . self::LOCK_TABLE . ' WHERE name = :name AND token = :token';
             $affected = $this->connection->executeStatement($sql, [
@@ -311,7 +343,7 @@ class DoctrineStorage implements CircuitBreakerStorageInterface
     public function isAvailable(): bool
     {
         try {
-            $this->connection->fetchOne('SELECT 1');
+            $this->connection->executeQuery('SELECT 1')->fetchOne();
             return true;
         } catch (Exception $e) {
             $this->logger->error('Database connection failed', [

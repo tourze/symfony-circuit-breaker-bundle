@@ -117,7 +117,7 @@ final class MetricsSnapshot
     public function getSuccessRate(): float
     {
         if ($this->totalCalls === 0) {
-            return 100.0;
+            return 0.0;
         }
 
         return ($this->successCalls / $this->totalCalls) * 100;

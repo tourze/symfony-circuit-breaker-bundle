@@ -22,7 +22,8 @@
     "symfony/yaml": "^6.4 || ^7.1",
     "tourze/doctrine-dedicated-connection-bundle": "0.0.*",
     "tourze/enum-extra": "0.1.*",
-    "tourze/redis-dedicated-connection-bundle": "0.0.*"
+    "tourze/redis-dedicated-connection-bundle": "0.0.*",
+    "tourze/symfony-routing-auto-loader-bundle": "0.0.*"
   },
   "require-dev": {
     "maglnet/composer-require-checker": "^4",

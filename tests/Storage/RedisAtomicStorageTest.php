@@ -12,7 +12,7 @@ use Tourze\Symfony\CircuitBreaker\Storage\RedisAtomicStorage;
 class RedisAtomicStorageTest extends TestCase
 {
     private RedisAtomicStorage $storage;
-    private \Redis|\RedisCluster $redis;
+    private \Redis $redis;
     
     public function testGetState_returnsDefaultState(): void
     {

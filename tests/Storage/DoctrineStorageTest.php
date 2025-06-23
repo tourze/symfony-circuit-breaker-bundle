@@ -3,6 +3,7 @@
 namespace Tourze\Symfony\CircuitBreaker\Tests\Storage;
 
 use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\Exception;
 use Doctrine\DBAL\Result;
 use Doctrine\DBAL\Schema\AbstractSchemaManager;
 use PHPUnit\Framework\TestCase;
@@ -44,6 +45,16 @@ class DoctrineStorageTest extends TestCase
                 return 1;
             });
 
+        // Mock the getState query after table creation
+        $result = $this->createMock(Result::class);
+        $result->expects($this->once())
+            ->method('fetchAssociative')
+            ->willReturn(false);
+        
+        $this->connection->expects($this->once())
+            ->method('executeQuery')
+            ->willReturn($result);
+
         // Trigger table creation
         $this->storage->getState('test');
     }
@@ -60,8 +71,8 @@ class DoctrineStorageTest extends TestCase
         $this->connection->expects($this->once())
             ->method('executeQuery')
             ->with(
-                $this->stringContains('SELECT * FROM circuit_breaker_state'),
-                ['test']
+                $this->stringContains('SELECT state, timestamp, attempt_count FROM circuit_breaker_state'),
+                ['name' => 'test']
             )
             ->willReturn($result);
 
@@ -141,20 +152,21 @@ class DoctrineStorageTest extends TestCase
             'name' => 'test',
             'timestamp' => $timestamp,
             'success' => 1,
-            'duration' => 100.0,
-            'exception' => null
+            'duration' => 100.0
         ];
 
         $callCount = 0;
-        $this->connection->expects($this->exactly(2))
+        $this->connection->expects($this->exactly(3))
             ->method('executeStatement')
             ->willReturnCallback(function ($sql, $params) use (&$callCount, $expectedParams) {
                 $callCount++;
                 if ($callCount === 1) {
-                    $this->assertStringContainsString('INSERT INTO circuit_breaker_calls', $sql);
+                    $this->assertStringContainsString('INSERT INTO circuit_breaker_metrics', $sql);
                     $this->assertEquals($expectedParams, $params);
+                } elseif ($callCount === 2) {
+                    $this->assertStringContainsString('DELETE FROM circuit_breaker_metrics', $sql);
                 } else {
-                    $this->assertStringContainsString('DELETE FROM circuit_breaker_calls', $sql);
+                    $this->assertStringContainsString('DELETE FROM circuit_breaker_locks', $sql);
                 }
                 return 1;
             });
@@ -168,19 +180,19 @@ class DoctrineStorageTest extends TestCase
 
         $result = $this->createMock(Result::class);
         $result->expects($this->once())
-            ->method('fetchAllAssociative')
+            ->method('fetchAssociative')
             ->willReturn([
-                ['success' => 1, 'duration' => 100.0],
-                ['success' => 1, 'duration' => 200.0],
-                ['success' => 0, 'duration' => 300.0],
-                ['success' => 0, 'duration' => 250.0],
-                ['success' => 1, 'duration' => 150.0]
+                'total_calls' => '5',
+                'success_calls' => '3',
+                'failed_calls' => '2',
+                'slow_calls' => '3',
+                'avg_duration' => '200.0'
             ]);
 
         $this->connection->expects($this->once())
             ->method('executeQuery')
             ->with(
-                $this->stringContains('SELECT success, duration FROM circuit_breaker_metrics'),
+                $this->stringContains('SELECT'),
                 $this->anything()
             )
             ->willReturn($result);
@@ -193,7 +205,7 @@ class DoctrineStorageTest extends TestCase
         $this->assertEquals(5, $metrics->getTotalCalls());
         $this->assertEquals(3, $metrics->getSuccessCalls());
         $this->assertEquals(2, $metrics->getFailedCalls());
-        $this->assertEquals(3, $metrics->getSlowCalls()); // 200ms, 300ms, 250ms
+        $this->assertEquals(3, $metrics->getSlowCalls());
         $this->assertEquals(200.0, $metrics->getAvgResponseTime());
 
         // Clean up
@@ -208,11 +220,11 @@ class DoctrineStorageTest extends TestCase
         $result->expects($this->once())
             ->method('fetchAssociative')
             ->willReturn([
-                'total_calls' => 100,
-                'success_calls' => 70,
-                'failed_calls' => 20,
-                'slow_calls' => 10,
-                'avg_response_time' => 150.5
+                'total_calls' => '100',
+                'success_calls' => '70',
+                'failed_calls' => '20',
+                'slow_calls' => '10',
+                'avg_duration' => '150.5'
             ]);
 
         $this->connection->expects($this->once())
@@ -246,13 +258,27 @@ class DoctrineStorageTest extends TestCase
             ->method('executeStatement')
             ->with(
                 $this->stringContains('INSERT INTO circuit_breaker_locks'),
-                [
-                    'name' => 'test',
-                    'token' => 'token123',
-                    'expires_at' => $this->anything()
-                ]
+                $this->callback(function ($params) {
+                    return $params['name'] === 'test' &&
+                           $params['token'] === 'token123' &&
+                           isset($params['expire_at']) &&
+                           isset($params['now']);
+                })
             )
             ->willReturn(1);
+
+        $lockResult = $this->createMock(Result::class);
+        $lockResult->expects($this->once())
+            ->method('fetchOne')
+            ->willReturn('token123');
+        
+        $this->connection->expects($this->once())
+            ->method('executeQuery')
+            ->with(
+                $this->stringContains('SELECT token FROM circuit_breaker_locks'),
+                ['name' => 'test']
+            )
+            ->willReturn($lockResult);
 
         $result = $this->storage->acquireLock('test', 'token123', 5);
 
@@ -265,7 +291,20 @@ class DoctrineStorageTest extends TestCase
 
         $this->connection->expects($this->once())
             ->method('executeStatement')
-            ->willThrowException(new \Exception('Duplicate entry'));
+            ->willReturn(1); // Successful insert/update
+
+        $lockResult = $this->createMock(Result::class);
+        $lockResult->expects($this->once())
+            ->method('fetchOne')
+            ->willReturn('other-token'); // Different token, so lock failed
+        
+        $this->connection->expects($this->once())
+            ->method('executeQuery')
+            ->with(
+                $this->stringContains('SELECT token FROM circuit_breaker_locks'),
+                ['name' => 'test']
+            )
+            ->willReturn($lockResult);
 
         $result = $this->storage->acquireLock('test', 'token123', 5);
 
@@ -294,20 +333,26 @@ class DoctrineStorageTest extends TestCase
     
     public function testIsAvailable(): void
     {
-        $this->connection->expects($this->once())
+        $result = $this->createMock(Result::class);
+        $result->expects($this->once())
             ->method('fetchOne')
-            ->with('SELECT 1')
             ->willReturn(1);
+        
+        $this->connection->expects($this->once())
+            ->method('executeQuery')
+            ->with('SELECT 1')
+            ->willReturn($result);
 
         $this->assertTrue($this->storage->isAvailable());
     }
     
     public function testIsAvailable_connectionFails(): void
     {
+        $exception = $this->createMock(Exception::class);
         $this->connection->expects($this->once())
-            ->method('fetchOne')
+            ->method('executeQuery')
             ->with('SELECT 1')
-            ->willThrowException(new \Exception('Connection failed'));
+            ->willThrowException($exception);
 
         $this->assertFalse($this->storage->isAvailable());
     }
@@ -316,10 +361,15 @@ class DoctrineStorageTest extends TestCase
     {
         $this->setupTableExists();
 
-        $this->connection->expects($this->once())
+        $result = $this->createMock(Result::class);
+        $result->expects($this->once())
             ->method('fetchFirstColumn')
-            ->with($this->stringContains('SELECT DISTINCT name FROM circuit_breaker_state'))
             ->willReturn(['circuit1', 'circuit2', 'circuit3']);
+        
+        $this->connection->expects($this->once())
+            ->method('executeQuery')
+            ->with($this->stringContains('SELECT DISTINCT name FROM circuit_breaker_state'))
+            ->willReturn($result);
 
         $names = $this->storage->getAllCircuitNames();
 
@@ -359,7 +409,7 @@ class DoctrineStorageTest extends TestCase
         $this->setupTableExists();
 
         // Should be called automatically on recordCall
-        $matcher = $this->exactly(2);
+        $matcher = $this->exactly(3);
         $this->connection->expects($matcher)
             ->method('executeStatement')
             ->willReturnCallback(function ($sql) use ($matcher) {
@@ -369,6 +419,9 @@ class DoctrineStorageTest extends TestCase
                         break;
                     case 2:
                         $this->assertStringContainsString('DELETE FROM circuit_breaker_metrics', $sql);
+                        break;
+                    case 3:
+                        $this->assertStringContainsString('DELETE FROM circuit_breaker_locks', $sql);
                         break;
                 }
                 return 1;

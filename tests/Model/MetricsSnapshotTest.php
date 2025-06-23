@@ -18,7 +18,7 @@ class MetricsSnapshotTest extends TestCase
         $this->assertEquals(0, $snapshot->getNotPermittedCalls());
         $this->assertEquals(0.0, $snapshot->getAvgResponseTime());
         $this->assertEquals(0.0, $snapshot->getFailureRate());
-        $this->assertEquals(100.0, $snapshot->getSuccessRate());
+        $this->assertEquals(0.0, $snapshot->getSuccessRate());
         $this->assertEquals(0.0, $snapshot->getSlowCallRate());
     }
     
