@@ -8,7 +8,7 @@ use Symfony\Contracts\HttpClient\ResponseStreamInterface;
 
 /**
  * 带熔断功能的HTTP客户端
- * 
+ *
  * 包装原始HTTP客户端，添加熔断功能
  */
 class CircuitBreakerHttpClient implements HttpClientInterface
@@ -32,7 +32,7 @@ class CircuitBreakerHttpClient implements HttpClientInterface
         CircuitBreakerService $circuitBreakerService,
         HttpClientInterface $httpClient,
         string $servicePrefix = 'http_client_',
-        callable $fallbackFactory = null
+        ?callable $fallbackFactory = null
     ) {
         $this->circuitBreakerService = $circuitBreakerService;
         $this->httpClient = $httpClient;
@@ -45,7 +45,8 @@ class CircuitBreakerHttpClient implements HttpClientInterface
      */
     private function generateServiceName(string $url): string
     {
-        $host = parse_url($url, PHP_URL_HOST) ?: 'unknown';
+        $host = parse_url($url, PHP_URL_HOST);
+        $host = $host !== false && $host !== null ? $host : 'unknown';
         return $this->servicePrefix . $host;
     }
 
@@ -68,7 +69,7 @@ class CircuitBreakerHttpClient implements HttpClientInterface
     /**
      * {@inheritdoc}
      */
-    public function stream($responses, float $timeout = null): ResponseStreamInterface
+    public function stream($responses, ?float $timeout = null): ResponseStreamInterface
     {
         // 对响应流不做熔断处理，直接透传
         return $this->httpClient->stream($responses, $timeout);

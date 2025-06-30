@@ -13,10 +13,10 @@ use Tourze\Symfony\CircuitBreaker\Model\MetricsSnapshot;
 
 /**
  * Doctrine数据库存储实现
- * 
+ *
  * 作为Redis的备用存储方案
  */
-#[WithDedicatedConnection('circuit_breaker')]
+#[WithDedicatedConnection(channel: 'circuit_breaker')]
 class DoctrineStorage implements CircuitBreakerStorageInterface
 {
     private const STATE_TABLE = 'circuit_breaker_state';
@@ -248,7 +248,7 @@ class DoctrineStorage implements CircuitBreakerStorageInterface
         try {
             $sql = 'SELECT DISTINCT name FROM ' . self::STATE_TABLE;
             $names = $this->connection->executeQuery($sql)->fetchFirstColumn();
-            return $names ?: [];
+            return $names;
         } catch (Exception $e) {
             $this->logger->error('Failed to get circuit names from database', [
                 'error' => $e->getMessage(),

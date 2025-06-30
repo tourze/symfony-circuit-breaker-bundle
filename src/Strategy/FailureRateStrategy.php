@@ -6,7 +6,7 @@ use Tourze\Symfony\CircuitBreaker\Model\MetricsSnapshot;
 
 /**
  * 失败率策略
- * 
+ *
  * 基于失败率决定是否开启或关闭熔断器
  */
 class FailureRateStrategy implements CircuitBreakerStrategyInterface

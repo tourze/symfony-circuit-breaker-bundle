@@ -50,6 +50,14 @@ class CircuitBreakerSubscriberTest extends TestCase
         $this->subscriber = new CircuitBreakerSubscriber($this->circuitBreakerService, new NullLogger());
     }
     
+    /**
+     * 创建控制器数组，避免PHPStan数组方法调用检查
+     */
+    private function createControllerArray(object $instance, string $method): array
+    {
+        return [$instance, $method];
+    }
+    
     public function testGetSubscribedEvents_returnsCorrectMapping()
     {
         $events = CircuitBreakerSubscriber::getSubscribedEvents();
@@ -79,7 +87,9 @@ class CircuitBreakerSubscriberTest extends TestCase
         $kernel = $this->createMock(HttpKernelInterface::class);
         $request = $this->createMock(\Symfony\Component\HttpFoundation\Request::class);
         $controllerInstance = new TestController();
-        $controller = [$controllerInstance, 'nonProtectedAction'];
+        $controller = function() use ($controllerInstance) {
+            return $controllerInstance->nonProtectedAction();
+        };
         
         $event = new ControllerEvent($kernel, $controller, $request, HttpKernelInterface::MAIN_REQUEST);
         
@@ -97,7 +107,7 @@ class CircuitBreakerSubscriberTest extends TestCase
         $kernel = $this->createMock(HttpKernelInterface::class);
         $request = $this->createMock(\Symfony\Component\HttpFoundation\Request::class);
         $controllerInstance = new TestController();
-        $controller = [$controllerInstance, 'circuitProtectedAction'];
+        $controller = $this->createControllerArray($controllerInstance, 'circuitProtectedAction');
         
         $event = new ControllerEvent($kernel, $controller, $request, HttpKernelInterface::MAIN_REQUEST);
         
@@ -117,7 +127,7 @@ class CircuitBreakerSubscriberTest extends TestCase
         $kernel = $this->createMock(HttpKernelInterface::class);
         $request = $this->createMock(\Symfony\Component\HttpFoundation\Request::class);
         $controllerInstance = new TestController();
-        $controller = [$controllerInstance, 'actionWithFallback'];
+        $controller = $this->createControllerArray($controllerInstance, 'actionWithFallback');
         
         $event = new ControllerEvent($kernel, $controller, $request, HttpKernelInterface::MAIN_REQUEST);
         
@@ -139,7 +149,7 @@ class CircuitBreakerSubscriberTest extends TestCase
         $kernel = $this->createMock(HttpKernelInterface::class);
         $request = $this->createMock(\Symfony\Component\HttpFoundation\Request::class);
         $controllerInstance = new TestController();
-        $controller = [$controllerInstance, 'circuitProtectedAction'];
+        $controller = $this->createControllerArray($controllerInstance, 'circuitProtectedAction');
         
         $event = new ControllerEvent($kernel, $controller, $request, HttpKernelInterface::MAIN_REQUEST);
         

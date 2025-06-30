@@ -7,12 +7,13 @@ use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Tourze\Symfony\CircuitBreaker\Event\CircuitFailureEvent;
 use Tourze\Symfony\CircuitBreaker\Event\CircuitSuccessEvent;
 use Tourze\Symfony\CircuitBreaker\Exception\CircuitOpenException;
+use Tourze\Symfony\CircuitBreaker\Exception\ManualFailureException;
 use Tourze\Symfony\CircuitBreaker\Strategy\ConsecutiveFailureStrategy;
 use Tourze\Symfony\CircuitBreaker\Strategy\StrategyManager;
 
 /**
  * 熔断器服务
- * 
+ *
  * 基于Symfony组件实现的熔断器核心服务
  */
 class CircuitBreakerService
@@ -254,6 +255,6 @@ class CircuitBreakerService
      */
     public function markFailure(string $name): void
     {
-        $this->recordFailure($name, new \RuntimeException('Manual failure mark'));
+        $this->recordFailure($name, new ManualFailureException('Manual failure mark'));
     }
 } 

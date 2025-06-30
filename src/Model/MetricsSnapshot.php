@@ -4,7 +4,7 @@ namespace Tourze\Symfony\CircuitBreaker\Model;
 
 /**
  * 指标快照
- * 
+ *
  * 表示某个时间点的熔断器指标数据
  */
 final class MetricsSnapshot

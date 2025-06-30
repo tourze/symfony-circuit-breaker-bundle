@@ -6,7 +6,7 @@ use Tourze\Symfony\CircuitBreaker\Model\MetricsSnapshot;
 
 /**
  * 连续失败策略
- * 
+ *
  * 基于连续失败次数决定是否开启熔断器
  */
 class ConsecutiveFailureStrategy implements CircuitBreakerStrategyInterface

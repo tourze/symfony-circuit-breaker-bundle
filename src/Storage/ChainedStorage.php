@@ -10,7 +10,7 @@ use Tourze\Symfony\CircuitBreaker\Model\MetricsSnapshot;
 
 /**
  * 链式存储实现
- * 
+ *
  * 提供故障转移功能，当主存储不可用时自动切换到备用存储
  */
 class ChainedStorage implements CircuitBreakerStorageInterface

@@ -13,7 +13,7 @@ use Tourze\Symfony\CircuitBreaker\Storage\CircuitBreakerStorageInterface;
 
 /**
  * 熔断器状态管理器
- * 
+ *
  * 负责管理和转换熔断器状态
  */
 class StateManager

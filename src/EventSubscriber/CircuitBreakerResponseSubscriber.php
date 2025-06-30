@@ -16,7 +16,7 @@ use Tourze\Symfony\CircuitBreaker\Service\CircuitBreakerService;
 
 /**
  * 请求结果收集器
- * 
+ *
  * 用于自动收集控制器方法的成功/失败信息
  */
 class CircuitBreakerResponseSubscriber implements EventSubscriberInterface

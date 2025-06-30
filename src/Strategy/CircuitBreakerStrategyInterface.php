@@ -6,7 +6,7 @@ use Tourze\Symfony\CircuitBreaker\Model\MetricsSnapshot;
 
 /**
  * 熔断器策略接口
- * 
+ *
  * 定义熔断器的开启和关闭策略
  */
 interface CircuitBreakerStrategyInterface

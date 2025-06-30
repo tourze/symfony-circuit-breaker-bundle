@@ -6,7 +6,7 @@ use Psr\Log\LoggerInterface;
 
 /**
  * 策略管理器
- * 
+ *
  * 管理和选择熔断器策略
  */
 class StrategyManager

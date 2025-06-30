@@ -15,7 +15,7 @@ class CircuitOpenException extends \RuntimeException
     {
         $this->circuitName = $circuitName;
 
-        $message = $message ?: sprintf('电路熔断器 "%s" 当前处于打开状态，请求被拒绝', $circuitName);
+        $message = !empty($message) ? $message : sprintf('电路熔断器 "%s" 当前处于打开状态，请求被拒绝', $circuitName);
 
         parent::__construct($message, $code, $previous);
     }

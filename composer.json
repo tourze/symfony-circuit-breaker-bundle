@@ -15,6 +15,7 @@
     "symfony/event-dispatcher": "^6.4",
     "symfony/event-dispatcher-contracts": "^2.5 | ^3",
     "symfony/framework-bundle": "^6.4",
+    "symfony/http-client": "^6.4",
     "symfony/http-client-contracts": "^2.5 | ^3.0",
     "symfony/http-foundation": "^6.4",
     "symfony/http-kernel": "^6.4",

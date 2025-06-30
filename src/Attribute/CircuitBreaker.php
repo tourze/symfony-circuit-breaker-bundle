@@ -6,7 +6,7 @@ use Attribute;
 
 /**
  * CircuitBreaker属性，用于标记应用熔断器的方法
- * 
+ *
  * 参考Spring的CircuitBreaker注解设计
  */
 #[Attribute(Attribute::TARGET_METHOD)]

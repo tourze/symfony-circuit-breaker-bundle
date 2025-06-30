@@ -7,7 +7,7 @@ use Tourze\Symfony\CircuitBreaker\Storage\CircuitBreakerStorageInterface;
 
 /**
  * 熔断器注册中心
- * 
+ *
  * 管理所有熔断器实例的中央注册表
  */
 class CircuitBreakerRegistry

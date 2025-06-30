@@ -11,10 +11,10 @@ use Tourze\Symfony\CircuitBreaker\Model\MetricsSnapshot;
 
 /**
  * Redis原子操作存储实现
- * 
+ *
  * 使用Redis的原子操作来存储熔断器状态和指标
  */
-#[WithDedicatedConnection('circuit_breaker')]
+#[WithDedicatedConnection(channel: 'circuit_breaker')]
 class RedisAtomicStorage implements CircuitBreakerStorageInterface
 {
     private const KEY_PREFIX = 'circuit:';
@@ -156,7 +156,8 @@ class RedisAtomicStorage implements CircuitBreakerStorageInterface
 
     public function getAllCircuitNames(): array
     {
-        return $this->redis->sMembers(self::CIRCUITS_SET_KEY) ?: [];
+        $members = $this->redis->sMembers(self::CIRCUITS_SET_KEY);
+        return $members !== false ? $members : [];
     }
 
     public function deleteCircuit(string $name): void

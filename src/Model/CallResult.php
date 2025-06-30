@@ -4,7 +4,7 @@ namespace Tourze\Symfony\CircuitBreaker\Model;
 
 /**
  * 调用结果
- * 
+ *
  * 记录单次调用的结果信息
  */
 final class CallResult

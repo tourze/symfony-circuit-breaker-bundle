@@ -4,7 +4,7 @@ namespace Tourze\Symfony\CircuitBreaker\Event;
 
 /**
  * 熔断器打开事件
- * 
+ *
  * 当熔断器从关闭状态转为打开状态时触发
  */
 final class CircuitOpenedEvent extends CircuitBreakerEvent

@@ -8,7 +8,7 @@ use Tourze\Symfony\CircuitBreaker\Storage\CircuitBreakerStorageInterface;
 
 /**
  * 指标收集器
- * 
+ *
  * 负责收集和统计熔断器的调用指标
  */
 class MetricsCollector

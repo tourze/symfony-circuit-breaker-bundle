@@ -135,4 +135,32 @@ class CircuitBreakerStateTest extends TestCase
         $this->assertGreaterThanOrEqual(time() - 1, $state->getTimestamp());
         $this->assertEquals(0, $state->getAttemptCount());
     }
+    
+    public function testCircuitStateGenOptions_returnsCorrectFormat()
+    {
+        $options = CircuitState::genOptions();
+        
+        $expectedOptions = [
+            [
+                'label' => '关闭',
+                'text' => '关闭',
+                'value' => 'closed',
+                'name' => '关闭',
+            ],
+            [
+                'label' => '开启',
+                'text' => '开启',
+                'value' => 'open',
+                'name' => '开启',
+            ],
+            [
+                'label' => '半开',
+                'text' => '半开',
+                'value' => 'half_open',
+                'name' => '半开',
+            ],
+        ];
+        
+        $this->assertEquals($expectedOptions, $options);
+    }
 } 

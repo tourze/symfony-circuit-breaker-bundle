@@ -4,7 +4,7 @@ namespace Tourze\Symfony\CircuitBreaker\Event;
 
 /**
  * 熔断器调用失败事件
- * 
+ *
  * 当受熔断器保护的方法调用失败时触发
  */
 final class CircuitFailureEvent extends CircuitBreakerEvent

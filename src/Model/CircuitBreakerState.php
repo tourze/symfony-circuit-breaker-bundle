@@ -20,7 +20,7 @@ class CircuitBreakerState
         private int $attemptCount = 0
     )
     {
-        $this->timestamp = $timestamp ?: time();
+        $this->timestamp = $timestamp === 0 ? time() : $timestamp;
     }
 
     /**

@@ -8,7 +8,7 @@ use Tourze\Symfony\CircuitBreaker\Model\MetricsSnapshot;
 
 /**
  * 内存存储实现
- * 
+ *
  * 最后的兜底方案，确保熔断器始终可用
  * 注意：此存储不支持跨进程/请求的数据共享
  */

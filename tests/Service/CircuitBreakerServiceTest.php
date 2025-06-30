@@ -15,6 +15,8 @@ use Tourze\Symfony\CircuitBreaker\Service\MetricsCollector;
 use Tourze\Symfony\CircuitBreaker\Service\StateManager;
 use Tourze\Symfony\CircuitBreaker\Storage\MemoryStorage;
 use Tourze\Symfony\CircuitBreaker\Strategy\StrategyManager;
+use Tourze\Symfony\CircuitBreaker\Tests\Exception\TestOperationFailedException;
+
 
 class CircuitBreakerServiceTest extends TestCase
 {
@@ -300,7 +302,7 @@ class CircuitBreakerServiceTest extends TestCase
             $this->circuitBreakerService->execute(
                 'service1',
                 function() {
-                    throw new \RuntimeException('Operation failed');
+                    throw new TestOperationFailedException('Operation failed');
                 }
             );
         } finally {
