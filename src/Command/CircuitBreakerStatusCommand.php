@@ -9,6 +9,7 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Component\DependencyInjection\Attribute\Autoconfigure;
 use Tourze\Symfony\CircuitBreaker\Service\CircuitBreakerRegistry;
 use Tourze\Symfony\CircuitBreaker\Service\CircuitBreakerService;
 
@@ -16,12 +17,14 @@ use Tourze\Symfony\CircuitBreaker\Service\CircuitBreakerService;
     name: self::NAME,
     description: '查看和管理熔断器状态',
 )]
+#[Autoconfigure]
 class CircuitBreakerStatusCommand extends Command
 {
     public const NAME = 'circuit-breaker:status';
+
     public function __construct(
         private readonly CircuitBreakerService $circuitBreaker,
-        private readonly CircuitBreakerRegistry $registry
+        private readonly CircuitBreakerRegistry $registry,
     ) {
         parent::__construct();
     }
@@ -45,38 +48,41 @@ class CircuitBreakerStatusCommand extends Command
         $jsonOutput = $input->getOption('json');
 
         // 显示健康状态
-        if ($input->getOption('health') === true) {
-            return $this->showHealthStatus($io, $jsonOutput === true);
+        if (true === $input->getOption('health')) {
+            return $this->showHealthStatus($io, true === $jsonOutput);
         }
 
         // 如果没有指定服务名，显示所有服务状态
-        if ($serviceName === null) {
-            return $this->showAllServicesStatus($io, $jsonOutput === true);
+        if (null === $serviceName) {
+            return $this->showAllServicesStatus($io, true === $jsonOutput);
         }
 
         // 处理重置操作
-        if ($input->getOption('reset') === true) {
+        if (true === $input->getOption('reset')) {
             $this->circuitBreaker->resetCircuit($serviceName);
             $io->success(sprintf('熔断器 "%s" 已重置', $serviceName));
+
             return Command::SUCCESS;
         }
 
         // 处理强制打开
-        if ($input->getOption('force-open') === true) {
+        if (true === $input->getOption('force-open')) {
             $this->circuitBreaker->forceOpen($serviceName);
             $io->success(sprintf('熔断器 "%s" 已强制打开', $serviceName));
+
             return Command::SUCCESS;
         }
 
         // 处理强制关闭
-        if ($input->getOption('force-close') === true) {
+        if (true === $input->getOption('force-close')) {
             $this->circuitBreaker->forceClose($serviceName);
             $io->success(sprintf('熔断器 "%s" 已强制关闭', $serviceName));
+
             return Command::SUCCESS;
         }
 
         // 显示特定服务状态
-        return $this->showServiceStatus($io, $serviceName, $jsonOutput === true);
+        return $this->showServiceStatus($io, $serviceName, true === $jsonOutput);
     }
 
     private function showHealthStatus(SymfonyStyle $io, bool $jsonOutput): int
@@ -84,19 +90,21 @@ class CircuitBreakerStatusCommand extends Command
         $health = $this->registry->getHealthStatus();
 
         if ($jsonOutput) {
-            $io->writeln(json_encode($health, JSON_PRETTY_PRINT));
+            $jsonOutput = json_encode($health, JSON_PRETTY_PRINT);
+            $io->writeln(false !== $jsonOutput ? $jsonOutput : '{"error": "JSON encoding failed"}');
+
             return Command::SUCCESS;
         }
 
         $io->title('熔断器健康状态');
-        
+
         $rows = [
             ['总熔断器数', $health['total_circuits']],
             ['开启状态', sprintf('<error>%d</error>', $health['open_circuits'])],
             ['半开状态', sprintf('<comment>%d</comment>', $health['half_open_circuits'])],
             ['关闭状态', sprintf('<info>%d</info>', $health['closed_circuits'])],
             ['存储类型', $health['storage_type']],
-            ['存储可用', $health['storage_available'] ? '<info>是</info>' : '<error>否</error>'],
+            ['存储可用', true === $health['storage_available'] ? '<info>是</info>' : '<error>否</error>'],
         ];
 
         $io->table(['指标', '值'], $rows);
@@ -113,14 +121,17 @@ class CircuitBreakerStatusCommand extends Command
     private function showAllServicesStatus(SymfonyStyle $io, bool $jsonOutput): int
     {
         $circuits = $this->registry->getAllCircuitsInfo();
-        
+
         if ($jsonOutput) {
-            $io->writeln(json_encode($circuits, JSON_PRETTY_PRINT));
+            $jsonOutput = json_encode($circuits, JSON_PRETTY_PRINT);
+            $io->writeln(false !== $jsonOutput ? $jsonOutput : '{"error": "JSON encoding failed"}');
+
             return Command::SUCCESS;
         }
 
-        if (empty($circuits)) {
+        if ([] === $circuits) {
             $io->info('暂无任何熔断器数据');
+
             return Command::SUCCESS;
         }
 
@@ -129,7 +140,7 @@ class CircuitBreakerStatusCommand extends Command
 
         foreach ($circuits as $name => $info) {
             $metrics = $info['metrics'] ?? [];
-            
+
             $rows[] = [
                 $name,
                 $this->getStateLabel($info['state'] ?? 'unknown'),
@@ -144,6 +155,7 @@ class CircuitBreakerStatusCommand extends Command
         }
 
         $io->table($headers, $rows);
+
         return Command::SUCCESS;
     }
 
@@ -151,20 +163,22 @@ class CircuitBreakerStatusCommand extends Command
     {
         try {
             $info = $this->registry->getCircuitInfo($serviceName);
-            
+
             if ($jsonOutput) {
-                $io->writeln(json_encode($info, JSON_PRETTY_PRINT));
+                $jsonOutput = json_encode($info, JSON_PRETTY_PRINT);
+                $io->writeln(false !== $jsonOutput ? $jsonOutput : '{"error": "JSON encoding failed"}');
+
                 return Command::SUCCESS;
             }
-            
+
             $io->title(sprintf('熔断器状态: %s', $serviceName));
-            
+
             $rows = [
                 ['状态', $this->getStateLabel($info['state'] ?? 'unknown')],
                 ['上次状态变更', date('Y-m-d H:i:s', $info['state_timestamp'] ?? 0)],
                 ['存储类型', $info['storage'] ?? 'unknown'],
             ];
-            
+
             if (isset($info['metrics'])) {
                 $metrics = $info['metrics'];
                 $rows[] = ['---指标信息---', ''];
@@ -177,7 +191,7 @@ class CircuitBreakerStatusCommand extends Command
                 $rows[] = ['平均响应时间', sprintf('%.2fms', $metrics['avg_response_time'] ?? 0)];
                 $rows[] = ['被拒绝的调用', $metrics['not_permitted_calls'] ?? 0];
             }
-            
+
             if (isset($info['config'])) {
                 $config = $info['config'];
                 $rows[] = ['---配置信息---', ''];
@@ -190,11 +204,11 @@ class CircuitBreakerStatusCommand extends Command
                 $rows[] = ['慢调用阈值', sprintf('%.0fms', $config['slow_call_duration_threshold'] ?? 0)];
                 $rows[] = ['慢调用率阈值', sprintf('%.0f%%', $config['slow_call_rate_threshold'] ?? 0)];
             }
-            
+
             $io->table(['属性', '值'], $rows);
-            
         } catch (\Exception $e) {
             $io->error(sprintf('无法获取服务 "%s" 的状态: %s', $serviceName, $e->getMessage()));
+
             return Command::FAILURE;
         }
 

@@ -2,9 +2,11 @@
 
 namespace Tourze\Symfony\CircuitBreaker\Tests\Service;
 
-use PHPUnit\Framework\TestCase;
+use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
+use Tourze\PHPUnitSymfonyKernelTest\AbstractIntegrationTestCase;
 use Tourze\Symfony\CircuitBreaker\Enum\CircuitState;
 use Tourze\Symfony\CircuitBreaker\Event\CircuitClosedEvent;
 use Tourze\Symfony\CircuitBreaker\Event\CircuitHalfOpenEvent;
@@ -13,21 +15,30 @@ use Tourze\Symfony\CircuitBreaker\Model\CircuitBreakerState;
 use Tourze\Symfony\CircuitBreaker\Service\StateManager;
 use Tourze\Symfony\CircuitBreaker\Storage\CircuitBreakerStorageInterface;
 
-class StateManagerTest extends TestCase
+/**
+ * @internal
+ */
+#[CoversClass(StateManager::class)]
+#[RunTestsInSeparateProcesses]
+final class StateManagerTest extends AbstractIntegrationTestCase
 {
     private StateManager $stateManager;
+
     private CircuitBreakerStorageInterface $storage;
+
     private EventDispatcherInterface $eventDispatcher;
+
     private LoggerInterface $logger;
-    
-    public function testGetState_usesCache(): void
+
+    public function testGetStateUsesCache(): void
     {
         $expectedState = new CircuitBreakerState(CircuitState::OPEN);
 
         $this->storage->expects($this->once())
             ->method('getState')
             ->with('test')
-            ->willReturn($expectedState);
+            ->willReturn($expectedState)
+        ;
 
         // First call - loads from storage
         $state1 = $this->stateManager->getState('test');
@@ -37,267 +48,311 @@ class StateManagerTest extends TestCase
         $state2 = $this->stateManager->getState('test');
         $this->assertEquals($expectedState, $state2);
     }
-    
-    public function testSetOpen_triggersEvent(): void
+
+    public function testSetOpenTriggersEvent(): void
     {
         $this->storage->expects($this->once())
             ->method('acquireLock')
-            ->with('test', $this->anything(), 5)
-            ->willReturn(true);
+            ->with('test', self::anything(), 5)
+            ->willReturn(true)
+        ;
 
         $this->storage->expects($this->once())
             ->method('saveState')
-            ->with('test', $this->callback(function ($state) {
+            ->with('test', self::callback(function ($state) {
                 return $state->isOpen();
             }))
-            ->willReturn(true);
+            ->willReturn(true)
+        ;
 
         $this->storage->expects($this->once())
             ->method('releaseLock')
-            ->willReturn(true);
+            ->willReturn(true)
+        ;
 
         $this->eventDispatcher->expects($this->once())
             ->method('dispatch')
-            ->with($this->callback(function ($event) {
-                return $event instanceof CircuitOpenedEvent &&
-                       $event->getCircuitName() === 'test' &&
-                       $event->getFailureRate() === 75.5;
-            }));
+            ->with(self::callback(function ($event) {
+                return $event instanceof CircuitOpenedEvent
+                       && 'test' === $event->getCircuitName()
+                       && 75.5 === $event->getFailureRate();
+            }))
+        ;
 
         $this->logger->expects($this->once())
             ->method('warning')
             ->with(
                 'Circuit breaker opened',
                 ['circuit' => 'test', 'failure_rate' => 75.5]
-            );
+            )
+        ;
 
         $this->stateManager->setOpen('test', 75.5);
     }
-    
-    public function testSetHalfOpen_triggersEvent(): void
+
+    public function testSetHalfOpenTriggersEvent(): void
     {
         $this->storage->expects($this->once())
             ->method('acquireLock')
-            ->willReturn(true);
+            ->willReturn(true)
+        ;
 
         $this->storage->expects($this->once())
             ->method('saveState')
-            ->with('test', $this->callback(function ($state) {
+            ->with('test', self::callback(function ($state) {
                 return $state->isHalfOpen();
             }))
-            ->willReturn(true);
+            ->willReturn(true)
+        ;
 
         $this->storage->expects($this->once())
             ->method('releaseLock')
-            ->willReturn(true);
+            ->willReturn(true)
+        ;
 
         $this->eventDispatcher->expects($this->once())
             ->method('dispatch')
-            ->with($this->isInstanceOf(CircuitHalfOpenEvent::class));
+            ->with(self::isInstanceOf(CircuitHalfOpenEvent::class))
+        ;
 
         $this->stateManager->setHalfOpen('test');
     }
-    
-    public function testSetClosed_triggersEvent(): void
+
+    public function testSetClosedTriggersEvent(): void
     {
         $this->storage->expects($this->once())
             ->method('acquireLock')
-            ->willReturn(true);
+            ->willReturn(true)
+        ;
 
         $this->storage->expects($this->once())
             ->method('saveState')
-            ->with('test', $this->callback(function ($state) {
+            ->with('test', self::callback(function ($state) {
                 return $state->isClosed();
             }))
-            ->willReturn(true);
+            ->willReturn(true)
+        ;
 
         $this->storage->expects($this->once())
             ->method('releaseLock')
-            ->willReturn(true);
+            ->willReturn(true)
+        ;
 
         $this->eventDispatcher->expects($this->once())
             ->method('dispatch')
-            ->with($this->isInstanceOf(CircuitClosedEvent::class));
+            ->with(self::isInstanceOf(CircuitClosedEvent::class))
+        ;
 
         $this->stateManager->setClosed('test');
     }
-    
-    public function testCheckForHalfOpenTransition_whenTimeElapsed(): void
+
+    public function testCheckForHalfOpenTransitionWhenTimeElapsed(): void
     {
         $openState = new CircuitBreakerState(CircuitState::OPEN, time() - 100);
 
         $this->storage->expects($this->once())
             ->method('getState')
-            ->willReturn($openState);
+            ->willReturn($openState)
+        ;
 
         // Should trigger transition to half-open
         $this->storage->expects($this->once())
             ->method('acquireLock')
-            ->willReturn(true);
+            ->willReturn(true)
+        ;
 
         $this->storage->expects($this->once())
             ->method('saveState')
-            ->with('test', $this->callback(function ($state) {
+            ->with('test', self::callback(function ($state) {
                 return $state->isHalfOpen();
             }))
-            ->willReturn(true);
+            ->willReturn(true)
+        ;
 
         $result = $this->stateManager->checkForHalfOpenTransition('test', 60);
 
         $this->assertTrue($result);
     }
-    
-    public function testCheckForHalfOpenTransition_whenTimeNotElapsed(): void
+
+    public function testCheckForHalfOpenTransitionWhenTimeNotElapsed(): void
     {
         $openState = new CircuitBreakerState(CircuitState::OPEN, time() - 30);
 
         $this->storage->expects($this->once())
             ->method('getState')
-            ->willReturn($openState);
+            ->willReturn($openState)
+        ;
 
         // Should not trigger transition
         $this->storage->expects($this->never())
-            ->method('acquireLock');
+            ->method('acquireLock')
+        ;
 
         $result = $this->stateManager->checkForHalfOpenTransition('test', 60);
 
         $this->assertFalse($result);
     }
-    
+
     public function testIncrementAttemptCount(): void
     {
         $state = new CircuitBreakerState(CircuitState::HALF_OPEN);
 
         $this->storage->expects($this->once())
             ->method('acquireLock')
-            ->willReturn(true);
+            ->willReturn(true)
+        ;
 
         $this->storage->expects($this->once())
             ->method('getState')
-            ->willReturn($state);
+            ->willReturn($state)
+        ;
 
         $this->storage->expects($this->once())
             ->method('saveState')
-            ->with('test', $this->callback(function ($state) {
-                return $state->getAttemptCount() === 1;
+            ->with('test', self::callback(function ($state) {
+                return 1 === $state->getAttemptCount();
             }))
-            ->willReturn(true);
+            ->willReturn(true)
+        ;
 
         $this->storage->expects($this->once())
             ->method('releaseLock')
-            ->willReturn(true);
+            ->willReturn(true)
+        ;
 
         $this->stateManager->incrementAttemptCount('test');
     }
-    
+
     public function testResetCircuit(): void
     {
         $this->storage->expects($this->once())
             ->method('saveState')
-            ->with('test', $this->callback(function ($state) {
-                return $state->isClosed() && $state->getAttemptCount() === 0;
+            ->with('test', self::callback(function ($state) {
+                return $state->isClosed() && 0 === $state->getAttemptCount();
             }))
-            ->willReturn(true);
+            ->willReturn(true)
+        ;
 
         $this->logger->expects($this->once())
             ->method('info')
-            ->with('Circuit breaker reset', ['circuit' => 'test']);
+            ->with('Circuit breaker reset', ['circuit' => 'test'])
+        ;
 
         $this->stateManager->resetCircuit('test');
     }
-    
+
     public function testForceOpen(): void
     {
         // Should delegate to setOpen
         $this->storage->expects($this->once())
             ->method('acquireLock')
-            ->willReturn(true);
+            ->willReturn(true)
+        ;
 
         $this->storage->expects($this->once())
             ->method('saveState')
-            ->willReturn(true);
+            ->willReturn(true)
+        ;
 
         $this->storage->expects($this->once())
             ->method('releaseLock')
-            ->willReturn(true);
+            ->willReturn(true)
+        ;
 
         $this->logger->expects($this->exactly(2))
-            ->method($this->anything());
+            ->method(self::anything())
+        ;
 
         $this->stateManager->forceOpen('test');
     }
-    
+
     public function testForceClose(): void
     {
         // Should delegate to setClosed
         $this->storage->expects($this->once())
             ->method('acquireLock')
-            ->willReturn(true);
+            ->willReturn(true)
+        ;
 
         $this->storage->expects($this->once())
             ->method('saveState')
-            ->willReturn(true);
+            ->willReturn(true)
+        ;
 
         $this->storage->expects($this->once())
             ->method('releaseLock')
-            ->willReturn(true);
+            ->willReturn(true)
+        ;
 
         $this->logger->expects($this->exactly(2))
-            ->method('info');
+            ->method('info')
+        ;
 
         $this->stateManager->forceClose('test');
     }
-    
-    public function testLockFailure_logsWarning(): void
+
+    public function testLockFailureLogsWarning(): void
     {
         $this->storage->expects($this->once())
             ->method('acquireLock')
-            ->willReturn(false);
+            ->willReturn(false)
+        ;
 
         $this->logger->expects($this->once())
             ->method('warning')
             ->with(
                 'Failed to acquire lock for state transition',
                 ['circuit' => 'test', 'state' => 'open']
-            );
+            )
+        ;
 
         $this->stateManager->setOpen('test');
     }
-    
-    public function testSaveFailure_logsError(): void
+
+    public function testSaveFailureLogsError(): void
     {
         $this->storage->expects($this->once())
             ->method('acquireLock')
-            ->willReturn(true);
+            ->willReturn(true)
+        ;
 
         $this->storage->expects($this->once())
             ->method('saveState')
-            ->willReturn(false);
+            ->willReturn(false)
+        ;
 
         $this->storage->expects($this->once())
             ->method('releaseLock')
-            ->willReturn(true);
+            ->willReturn(true)
+        ;
 
         $this->logger->expects($this->once())
             ->method('error')
             ->with(
                 'Failed to save circuit breaker state',
                 ['circuit' => 'test', 'state' => 'open']
-            );
+            )
+        ;
 
         $this->stateManager->setOpen('test');
     }
-    
-    protected function setUp(): void
+
+    protected function onSetUp(): void
     {
         $this->storage = $this->createMock(CircuitBreakerStorageInterface::class);
         $this->eventDispatcher = $this->createMock(EventDispatcherInterface::class);
         $this->logger = $this->createMock(LoggerInterface::class);
 
-        $this->stateManager = new StateManager(
-            $this->storage,
-            $this->eventDispatcher,
-            $this->logger
-        );
+        // 将 Mock 对象设置到容器中
+        $container = self::getContainer();
+        $container->set('Tourze\Symfony\CircuitBreaker\Storage\CircuitBreakerStorageInterface', $this->storage);
+
+        // StateManager 需要手动构建，因为：
+        // 1. 测试在独立进程中运行 (#[RunTestsInSeparateProcesses])
+        // 2. 需要 Mock 依赖进行行为验证
+        // 3. 容器中的默认服务已经初始化，无法替换为 Mock
+        // @phpstan-ignore-next-line 特殊的测试场景，需要Mock验证行为，无法从容器获取
+        $this->stateManager = new StateManager($this->storage, $this->eventDispatcher, $this->logger);
+        $container->set(StateManager::class, $this->stateManager);
     }
 }

@@ -3,12 +3,14 @@
 namespace Tourze\Symfony\CircuitBreaker\Strategy;
 
 use Psr\Log\LoggerInterface;
+use Symfony\Component\DependencyInjection\Attribute\Autoconfigure;
 
 /**
  * 策略管理器
  *
  * 管理和选择熔断器策略
  */
+#[Autoconfigure]
 class StrategyManager
 {
     /**
@@ -17,7 +19,7 @@ class StrategyManager
     private array $strategies = [];
 
     public function __construct(
-        private readonly LoggerInterface $logger
+        private readonly LoggerInterface $logger,
     ) {
         // 注册默认策略
         $this->registerStrategy(new FailureRateStrategy());
@@ -31,7 +33,7 @@ class StrategyManager
     public function registerStrategy(CircuitBreakerStrategyInterface $strategy): void
     {
         $this->strategies[$strategy->getName()] = $strategy;
-        
+
         $this->logger->debug('Registered circuit breaker strategy', [
             'strategy' => $strategy->getName(),
         ]);
@@ -39,13 +41,15 @@ class StrategyManager
 
     /**
      * 根据配置获取策略
+     *
+     * @param array<string, mixed> $config
      */
     public function getStrategyForConfig(array $config): CircuitBreakerStrategyInterface
     {
         $strategyName = $config['strategy'] ?? 'failure_rate';
         $strategy = $this->getStrategy($strategyName);
 
-        if ($strategy === null) {
+        if (null === $strategy) {
             $this->logger->warning('Unknown strategy, falling back to failure_rate', [
                 'requested_strategy' => $strategyName,
             ]);

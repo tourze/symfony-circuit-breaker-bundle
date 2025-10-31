@@ -5,8 +5,7 @@ namespace Tourze\Symfony\CircuitBreaker\Storage;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Exception;
 use Psr\Log\LoggerInterface;
-use Psr\Log\NullLogger;
-use Tourze\DoctrineDedicatedConnectionBundle\Attribute\WithDedicatedConnection;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Tourze\Symfony\CircuitBreaker\Model\CallResult;
 use Tourze\Symfony\CircuitBreaker\Model\CircuitBreakerState;
 use Tourze\Symfony\CircuitBreaker\Model\MetricsSnapshot;
@@ -16,7 +15,6 @@ use Tourze\Symfony\CircuitBreaker\Model\MetricsSnapshot;
  *
  * 作为Redis的备用存储方案
  */
-#[WithDedicatedConnection(channel: 'circuit_breaker')]
 class DoctrineStorage implements CircuitBreakerStorageInterface
 {
     private const STATE_TABLE = 'circuit_breaker_state';
@@ -26,8 +24,8 @@ class DoctrineStorage implements CircuitBreakerStorageInterface
     private bool $tablesChecked = false;
 
     public function __construct(
-        private readonly Connection $connection,
-        private readonly LoggerInterface $logger = new NullLogger()
+        #[Autowire(service: 'doctrine.dbal.circuit_breaker_connection')] private readonly Connection $connection,
+        private readonly LoggerInterface $logger,
     ) {
     }
 
@@ -41,6 +39,7 @@ class DoctrineStorage implements CircuitBreakerStorageInterface
             $schemaManager = $this->connection->createSchemaManager();
             if ($schemaManager->tablesExist([self::STATE_TABLE, self::METRICS_TABLE, self::LOCK_TABLE])) {
                 $this->tablesChecked = true;
+
                 return;
             }
             // 创建状态表
@@ -89,7 +88,7 @@ class DoctrineStorage implements CircuitBreakerStorageInterface
     public function saveState(string $name, CircuitBreakerState $state): bool
     {
         $this->ensureTablesExist();
-        
+
         try {
             $sql = '
                 INSERT INTO ' . self::STATE_TABLE . ' (name, state, timestamp, attempt_count, updated_at)
@@ -115,6 +114,7 @@ class DoctrineStorage implements CircuitBreakerStorageInterface
                 'circuit' => $name,
                 'error' => $e->getMessage(),
             ]);
+
             return false;
         }
     }
@@ -122,25 +122,26 @@ class DoctrineStorage implements CircuitBreakerStorageInterface
     public function getState(string $name): CircuitBreakerState
     {
         $this->ensureTablesExist();
-        
+
         try {
             $sql = 'SELECT state, timestamp, attempt_count FROM ' . self::STATE_TABLE . ' WHERE name = :name';
             $result = $this->connection->executeQuery($sql, ['name' => $name])->fetchAssociative();
 
-            if ($result === false) {
+            if (false === $result) {
                 return new CircuitBreakerState();
             }
 
             return CircuitBreakerState::fromArray([
                 'state' => $result['state'],
-                'timestamp' => (int)$result['timestamp'],
-                'attemptCount' => (int)$result['attempt_count'],
+                'timestamp' => (int) $result['timestamp'],
+                'attemptCount' => (int) $result['attempt_count'],
             ]);
         } catch (Exception $e) {
             $this->logger->error('Failed to get circuit breaker state from database', [
                 'circuit' => $name,
                 'error' => $e->getMessage(),
             ]);
+
             return new CircuitBreakerState();
         }
     }
@@ -148,7 +149,7 @@ class DoctrineStorage implements CircuitBreakerStorageInterface
     public function recordCall(string $name, CallResult $result): void
     {
         $this->ensureTablesExist();
-        
+
         try {
             $sql = '
                 INSERT INTO ' . self::METRICS_TABLE . ' (name, success, duration, timestamp)
@@ -197,10 +198,10 @@ class DoctrineStorage implements CircuitBreakerStorageInterface
     public function getMetricsSnapshot(string $name, int $windowSize): MetricsSnapshot
     {
         $this->ensureTablesExist();
-        
+
         try {
             $windowStart = time() - $windowSize;
-            $slowCallThreshold = (float)($_ENV['CIRCUIT_BREAKER_SLOW_CALL_THRESHOLD'] ?? 1000);
+            $slowCallThreshold = (float) ($_ENV['CIRCUIT_BREAKER_SLOW_CALL_THRESHOLD'] ?? 1000);
 
             $sql = '
                 SELECT 
@@ -219,17 +220,17 @@ class DoctrineStorage implements CircuitBreakerStorageInterface
                 'slow_threshold' => $slowCallThreshold,
             ])->fetchAssociative();
 
-            if ($result === false) {
+            if (false === $result) {
                 return new MetricsSnapshot();
             }
 
             return new MetricsSnapshot(
-                totalCalls: (int)$result['total_calls'],
-                successCalls: (int)$result['success_calls'],
-                failedCalls: (int)$result['failed_calls'],
-                slowCalls: (int)$result['slow_calls'],
+                totalCalls: (int) $result['total_calls'],
+                successCalls: (int) $result['success_calls'],
+                failedCalls: (int) $result['failed_calls'],
+                slowCalls: (int) $result['slow_calls'],
                 notPermittedCalls: 0,
-                avgResponseTime: (float)($result['avg_duration'] ?? 0),
+                avgResponseTime: (float) ($result['avg_duration'] ?? 0),
                 timestamp: time()
             );
         } catch (Exception $e) {
@@ -237,6 +238,7 @@ class DoctrineStorage implements CircuitBreakerStorageInterface
                 'circuit' => $name,
                 'error' => $e->getMessage(),
             ]);
+
             return new MetricsSnapshot();
         }
     }
@@ -244,15 +246,16 @@ class DoctrineStorage implements CircuitBreakerStorageInterface
     public function getAllCircuitNames(): array
     {
         $this->ensureTablesExist();
-        
+
         try {
             $sql = 'SELECT DISTINCT name FROM ' . self::STATE_TABLE;
-            $names = $this->connection->executeQuery($sql)->fetchFirstColumn();
-            return $names;
+
+            return $this->connection->executeQuery($sql)->fetchFirstColumn();
         } catch (Exception $e) {
             $this->logger->error('Failed to get circuit names from database', [
                 'error' => $e->getMessage(),
             ]);
+
             return [];
         }
     }
@@ -260,7 +263,7 @@ class DoctrineStorage implements CircuitBreakerStorageInterface
     public function deleteCircuit(string $name): void
     {
         $this->ensureTablesExist();
-        
+
         try {
             $this->connection->executeStatement(
                 'DELETE FROM ' . self::STATE_TABLE . ' WHERE name = :name',
@@ -285,7 +288,7 @@ class DoctrineStorage implements CircuitBreakerStorageInterface
     public function acquireLock(string $name, string $token, int $ttl): bool
     {
         $this->ensureTablesExist();
-        
+
         try {
             $expireAt = time() + $ttl;
 
@@ -315,6 +318,7 @@ class DoctrineStorage implements CircuitBreakerStorageInterface
                 'circuit' => $name,
                 'error' => $e->getMessage(),
             ]);
+
             return false;
         }
     }
@@ -322,7 +326,7 @@ class DoctrineStorage implements CircuitBreakerStorageInterface
     public function releaseLock(string $name, string $token): bool
     {
         $this->ensureTablesExist();
-        
+
         try {
             $sql = 'DELETE FROM ' . self::LOCK_TABLE . ' WHERE name = :name AND token = :token';
             $affected = $this->connection->executeStatement($sql, [
@@ -336,6 +340,7 @@ class DoctrineStorage implements CircuitBreakerStorageInterface
                 'circuit' => $name,
                 'error' => $e->getMessage(),
             ]);
+
             return false;
         }
     }
@@ -344,11 +349,13 @@ class DoctrineStorage implements CircuitBreakerStorageInterface
     {
         try {
             $this->connection->executeQuery('SELECT 1')->fetchOne();
+
             return true;
         } catch (Exception $e) {
             $this->logger->error('Database connection failed', [
                 'error' => $e->getMessage(),
             ]);
+
             return false;
         }
     }

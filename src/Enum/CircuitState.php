@@ -2,6 +2,7 @@
 
 namespace Tourze\Symfony\CircuitBreaker\Enum;
 
+use Tourze\EnumExtra\BadgeInterface;
 use Tourze\EnumExtra\Itemable;
 use Tourze\EnumExtra\ItemTrait;
 use Tourze\EnumExtra\Labelable;
@@ -11,7 +12,7 @@ use Tourze\EnumExtra\SelectTrait;
 /**
  * 熔断器状态枚举
  */
-enum CircuitState: string implements Itemable, Labelable, Selectable
+enum CircuitState: string implements Itemable, Labelable, Selectable, BadgeInterface
 {
     use ItemTrait;
     use SelectTrait;
@@ -31,7 +32,7 @@ enum CircuitState: string implements Itemable, Labelable, Selectable
      */
     case HALF_OPEN = 'half_open';
 
-    public function label(): string
+    public function getLabel(): string
     {
         return match ($this) {
             self::CLOSED => '关闭',
@@ -40,8 +41,12 @@ enum CircuitState: string implements Itemable, Labelable, Selectable
         };
     }
 
-    public function getLabel(): string
+    public function getBadge(): string
     {
-        return $this->label();
+        return match ($this) {
+            self::CLOSED => self::SUCCESS,
+            self::OPEN => self::DANGER,
+            self::HALF_OPEN => self::WARNING,
+        };
     }
 }

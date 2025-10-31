@@ -10,17 +10,16 @@ use Tourze\Symfony\CircuitBreaker\Enum\CircuitState;
 class CircuitBreakerState
 {
     /**
-     * @param CircuitState $state 当前状态
-     * @param int $timestamp 状态创建时间戳
-     * @param int $attemptCount 半开状态的尝试计数
+     * @param CircuitState $state        当前状态
+     * @param int          $timestamp    状态创建时间戳
+     * @param int          $attemptCount 半开状态的尝试计数
      */
     public function __construct(
         private CircuitState $state = CircuitState::CLOSED,
         private int $timestamp = 0,
-        private int $attemptCount = 0
-    )
-    {
-        $this->timestamp = $timestamp === 0 ? time() : $timestamp;
+        private int $attemptCount = 0,
+    ) {
+        $this->timestamp = 0 === $timestamp ? time() : $timestamp;
     }
 
     /**
@@ -39,7 +38,7 @@ class CircuitBreakerState
         $this->state = $state;
         $this->timestamp = time();
 
-        if ($state === CircuitState::HALF_OPEN) {
+        if (CircuitState::HALF_OPEN === $state) {
             $this->attemptCount = 0;
         }
     }
@@ -57,7 +56,7 @@ class CircuitBreakerState
      */
     public function incrementAttemptCount(): void
     {
-        $this->attemptCount++;
+        ++$this->attemptCount;
     }
 
     /**
@@ -73,7 +72,7 @@ class CircuitBreakerState
      */
     public function isClosed(): bool
     {
-        return $this->state === CircuitState::CLOSED;
+        return CircuitState::CLOSED === $this->state;
     }
 
     /**
@@ -81,7 +80,7 @@ class CircuitBreakerState
      */
     public function isOpen(): bool
     {
-        return $this->state === CircuitState::OPEN;
+        return CircuitState::OPEN === $this->state;
     }
 
     /**
@@ -89,23 +88,27 @@ class CircuitBreakerState
      */
     public function isHalfOpen(): bool
     {
-        return $this->state === CircuitState::HALF_OPEN;
+        return CircuitState::HALF_OPEN === $this->state;
     }
 
     /**
      * 转换为数组
+     *
+     * @return array<string, mixed>
      */
     public function toArray(): array
     {
         return [
             'state' => $this->state->value,
             'timestamp' => $this->timestamp,
-            'attemptCount' => $this->attemptCount
+            'attemptCount' => $this->attemptCount,
         ];
     }
 
     /**
      * 从数组创建
+     *
+     * @param array<string, mixed> $data
      */
     public static function fromArray(array $data): self
     {

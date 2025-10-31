@@ -2,21 +2,28 @@
 
 namespace Tourze\Symfony\CircuitBreaker\Service;
 
+use Symfony\Component\DependencyInjection\Attribute\Autoconfigure;
 use Tourze\Symfony\CircuitBreaker\Storage\ChainedStorage;
 use Tourze\Symfony\CircuitBreaker\Storage\CircuitBreakerStorageInterface;
+use Tourze\Symfony\CircuitBreaker\Storage\DoctrineStorage;
+use Tourze\Symfony\CircuitBreaker\Storage\MemoryStorage;
+use Tourze\Symfony\CircuitBreaker\Storage\RedisAtomicStorage;
 
 /**
  * 熔断器注册中心
  *
  * 管理所有熔断器实例的中央注册表
  */
+#[Autoconfigure]
 class CircuitBreakerRegistry
 {
-private const CACHE_TTL = 1;
+    private const CACHE_TTL = 1;
+
     /**
      * @var array<string, array<string, mixed>> 熔断器信息缓存
      */
     private array $circuitInfoCache = [];
+
     /**
      * @var array<string, int> 缓存时间戳
      */
@@ -26,12 +33,14 @@ private const CACHE_TTL = 1;
         private readonly CircuitBreakerStorageInterface $storage,
         private readonly CircuitBreakerConfigService $configService,
         private readonly StateManager $stateManager,
-        private readonly MetricsCollector $metricsCollector
+        private readonly MetricsCollector $metricsCollector,
     ) {
     }
 
     /**
      * 获取所有熔断器的汇总信息
+     *
+     * @return array<string, array<string, mixed>>
      */
     public function getAllCircuitsInfo(): array
     {
@@ -45,6 +54,8 @@ private const CACHE_TTL = 1;
 
     /**
      * 获取所有熔断器名称
+     *
+     * @return array<string>
      */
     public function getAllCircuits(): array
     {
@@ -53,12 +64,14 @@ private const CACHE_TTL = 1;
 
     /**
      * 获取熔断器详细信息
+     *
+     * @return array<string, mixed>
      */
     public function getCircuitInfo(string $name): array
     {
         // 检查缓存
-        if (isset($this->circuitInfoCache[$name]) &&
-            time() - ($this->cacheTimestamps[$name] ?? 0) < self::CACHE_TTL) {
+        if (isset($this->circuitInfoCache[$name])
+            && time() - ($this->cacheTimestamps[$name] ?? 0) < self::CACHE_TTL) {
             return $this->circuitInfoCache[$name];
         }
 
@@ -92,15 +105,17 @@ private const CACHE_TTL = 1;
         }
 
         return match (true) {
-            $this->storage instanceof \Tourze\Symfony\CircuitBreaker\Storage\RedisAtomicStorage => 'redis',
-            $this->storage instanceof \Tourze\Symfony\CircuitBreaker\Storage\DoctrineStorage => 'doctrine',
-            $this->storage instanceof \Tourze\Symfony\CircuitBreaker\Storage\MemoryStorage => 'memory',
+            $this->storage instanceof RedisAtomicStorage => 'redis',
+            $this->storage instanceof DoctrineStorage => 'doctrine',
+            $this->storage instanceof MemoryStorage => 'memory',
             default => 'unknown',
         };
     }
 
     /**
      * 获取熔断器健康状态
+     *
+     * @return array<string, mixed>
      */
     public function getHealthStatus(): array
     {

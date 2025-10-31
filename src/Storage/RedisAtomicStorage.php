@@ -22,12 +22,12 @@ class RedisAtomicStorage implements CircuitBreakerStorageInterface
     private const METRICS_KEY_SUFFIX = ':metrics';
     private const LOCK_KEY_SUFFIX = ':lock';
     private const CIRCUITS_SET_KEY = 'circuit:all';
-    
+
     private const DEFAULT_WINDOW_SIZE = 60; // 默认60秒窗口
 
     public function __construct(
         private readonly \Redis $redis,
-        private readonly LoggerInterface $logger = new NullLogger()
+        private readonly LoggerInterface $logger = new NullLogger(),
     ) {
     }
 
@@ -37,8 +37,8 @@ class RedisAtomicStorage implements CircuitBreakerStorageInterface
 
         $result = $this->redis->hMset($key, [
             'state' => $state->getState()->value,
-            'timestamp' => (string)$state->getTimestamp(),
-            'attempt_count' => (string)$state->getAttemptCount(),
+            'timestamp' => (string) $state->getTimestamp(),
+            'attempt_count' => (string) $state->getAttemptCount(),
         ]);
 
         if ($result) {
@@ -48,7 +48,7 @@ class RedisAtomicStorage implements CircuitBreakerStorageInterface
             $this->redis->expire($key, 604800);
         }
 
-        return $result;
+        return (bool) $result;
     }
 
     private function getStateKey(string $name): string
@@ -61,15 +61,15 @@ class RedisAtomicStorage implements CircuitBreakerStorageInterface
         $key = $this->getStateKey($name);
         $data = $this->redis->hGetAll($key);
 
-        if (empty($data)) {
+        if ([] === $data) {
             return new CircuitBreakerState();
         }
 
         try {
             return CircuitBreakerState::fromArray([
                 'state' => $data['state'] ?? 'closed',
-                'timestamp' => (int)($data['timestamp'] ?? 0),
-                'attemptCount' => (int)($data['attempt_count'] ?? 0),
+                'timestamp' => (int) ($data['timestamp'] ?? 0),
+                'attemptCount' => (int) ($data['attempt_count'] ?? 0),
             ]);
         } catch (\Throwable $e) {
             $this->logger->error('Failed to parse circuit breaker state', [
@@ -77,6 +77,7 @@ class RedisAtomicStorage implements CircuitBreakerStorageInterface
                 'error' => $e->getMessage(),
                 'data' => $data,
             ]);
+
             return new CircuitBreakerState();
         }
     }
@@ -92,7 +93,7 @@ class RedisAtomicStorage implements CircuitBreakerStorageInterface
 
         // 清理过期数据（保留最近的窗口数据）
         $windowStart = time() - self::DEFAULT_WINDOW_SIZE;
-        $this->redis->zRemRangeByScore($metricsKey, '0', (string)($windowStart - 1));
+        $this->redis->zRemRangeByScore($metricsKey, '0', (string) ($windowStart - 1));
 
         // 设置过期时间
         $this->redis->expire($metricsKey, self::DEFAULT_WINDOW_SIZE * 2);
@@ -112,52 +113,89 @@ class RedisAtomicStorage implements CircuitBreakerStorageInterface
         $windowStart = time() - $windowSize;
 
         // 获取窗口内的所有数据
-        $data = $this->redis->zRangeByScore($metricsKey, (string)$windowStart, (string)time());
+        $data = $this->redis->zRangeByScore($metricsKey, (string) $windowStart, (string) time());
 
+        $metrics = $this->calculateMetrics($data);
+
+        return new MetricsSnapshot(
+            totalCalls: $metrics['totalCalls'],
+            successCalls: $metrics['successCalls'],
+            failedCalls: $metrics['failedCalls'],
+            slowCalls: $metrics['slowCalls'],
+            notPermittedCalls: 0, // 这个需要单独统计
+            avgResponseTime: $metrics['avgResponseTime'],
+            timestamp: time()
+        );
+    }
+
+    /**
+     * 计算指标数据
+     *
+     * @param array<string> $data
+     * @return array<string, mixed>
+     */
+    private function calculateMetrics(array $data): array
+    {
         $totalCalls = 0;
         $successCalls = 0;
         $failedCalls = 0;
         $slowCalls = 0;
         $totalDuration = 0.0;
-        $slowCallThreshold = (float)($_ENV['CIRCUIT_BREAKER_SLOW_CALL_THRESHOLD'] ?? 1000); // 默认1秒
+        $slowCallThreshold = (float) ($_ENV['CIRCUIT_BREAKER_SLOW_CALL_THRESHOLD'] ?? 1000);
 
         foreach ($data as $entry) {
-            // 格式: timestamp:type:duration
-            if (preg_match('/^(\d+):(\w+):([\d.]+)$/', $entry, $matches)) {
-                $totalCalls++;
-                $type = $matches[2];
-                $duration = (float)$matches[3];
-                $totalDuration += $duration;
+            $parsed = $this->parseMetricsEntry($entry);
+            if (null === $parsed) {
+                continue;
+            }
 
-                if ($type === 'success') {
-                    $successCalls++;
-                } else {
-                    $failedCalls++;
-                }
+            ++$totalCalls;
+            $totalDuration += $parsed['duration'];
 
-                if ($duration > $slowCallThreshold) {
-                    $slowCalls++;
-                }
+            if ('success' === $parsed['type']) {
+                ++$successCalls;
+            } else {
+                ++$failedCalls;
+            }
+
+            if ($parsed['duration'] > $slowCallThreshold) {
+                ++$slowCalls;
             }
         }
 
-        $avgResponseTime = $totalCalls > 0 ? $totalDuration / $totalCalls : 0.0;
+        return [
+            'totalCalls' => $totalCalls,
+            'successCalls' => $successCalls,
+            'failedCalls' => $failedCalls,
+            'slowCalls' => $slowCalls,
+            'avgResponseTime' => $totalCalls > 0 ? $totalDuration / $totalCalls : 0.0,
+        ];
+    }
 
-        return new MetricsSnapshot(
-            totalCalls: $totalCalls,
-            successCalls: $successCalls,
-            failedCalls: $failedCalls,
-            slowCalls: $slowCalls,
-            notPermittedCalls: 0, // 这个需要单独统计
-            avgResponseTime: $avgResponseTime,
-            timestamp: time()
-        );
+    /**
+     * 解析指标条目
+     *
+     * @return array<string, mixed>|null
+     */
+    private function parseMetricsEntry(string $entry): ?array
+    {
+        // 格式: timestamp:type:duration
+        if (1 !== preg_match('/^(\d+):(\w+):([\d.]+)$/', $entry, $matches)) {
+            return null;
+        }
+
+        return [
+            'timestamp' => (int) $matches[1],
+            'type' => $matches[2],
+            'duration' => (float) $matches[3],
+        ];
     }
 
     public function getAllCircuitNames(): array
     {
         $members = $this->redis->sMembers(self::CIRCUITS_SET_KEY);
-        return $members !== false ? $members : [];
+
+        return false !== $members ? $members : [];
     }
 
     public function deleteCircuit(string $name): void
@@ -188,14 +226,14 @@ class RedisAtomicStorage implements CircuitBreakerStorageInterface
 
         // 使用Lua脚本确保原子性
         $script = <<<'LUA'
-if redis.call("get", KEYS[1]) == ARGV[1] then
-    return redis.call("del", KEYS[1])
-else
-    return 0
-end
-LUA;
+            if redis.call("get", KEYS[1]) == ARGV[1] then
+                return redis.call("del", KEYS[1])
+            else
+                return 0
+            end
+            LUA;
 
-        return (bool)$this->redis->eval($script, [$lockKey, $token], 1);
+        return (bool) $this->redis->eval($script, [$lockKey, $token], 1);
     }
 
     public function isAvailable(): bool
@@ -206,6 +244,7 @@ LUA;
             $this->logger->error('Redis connection failed', [
                 'error' => $e->getMessage(),
             ]);
+
             return false;
         }
     }

@@ -2,6 +2,7 @@
 
 namespace Tourze\Symfony\CircuitBreaker\Service;
 
+use Symfony\Component\DependencyInjection\Attribute\Autoconfigure;
 use Tourze\Symfony\CircuitBreaker\Model\CallResult;
 use Tourze\Symfony\CircuitBreaker\Model\MetricsSnapshot;
 use Tourze\Symfony\CircuitBreaker\Storage\CircuitBreakerStorageInterface;
@@ -11,6 +12,7 @@ use Tourze\Symfony\CircuitBreaker\Storage\CircuitBreakerStorageInterface;
  *
  * 负责收集和统计熔断器的调用指标
  */
+#[Autoconfigure]
 class MetricsCollector
 {
     /**
@@ -20,7 +22,7 @@ class MetricsCollector
 
     public function __construct(
         private readonly CircuitBreakerStorageInterface $storage,
-        private readonly CircuitBreakerConfigService $configService
+        private readonly CircuitBreakerConfigService $configService,
     ) {
     }
 
@@ -67,10 +69,10 @@ class MetricsCollector
     public function getSnapshot(string $name, int $windowSize): MetricsSnapshot
     {
         $snapshot = $this->storage->getMetricsSnapshot($name, $windowSize);
-        
+
         // 添加未被允许的调用计数
         $notPermittedCount = $this->notPermittedCalls[$name] ?? 0;
-        
+
         if ($notPermittedCount > 0) {
             // 创建新的快照，包含未被允许的调用计数
             return new MetricsSnapshot(
@@ -95,7 +97,7 @@ class MetricsCollector
         $config = $this->configService->getCircuitConfig($name);
         $ignoreExceptions = $config['ignore_exceptions'] ?? [];
 
-        if (empty($ignoreExceptions)) {
+        if ([] === $ignoreExceptions) {
             return false;
         }
 
@@ -117,7 +119,7 @@ class MetricsCollector
         $recordExceptions = $config['record_exceptions'] ?? [];
 
         // 如果列表为空，记录所有异常
-        if (empty($recordExceptions)) {
+        if ([] === $recordExceptions) {
             return true;
         }
 
@@ -154,7 +156,7 @@ class MetricsCollector
     {
         // 清理超过1小时没有更新的计数器
         $cutoff = time() - 3600;
-        
+
         foreach ($this->notPermittedCalls as $name => $count) {
             $snapshot = $this->storage->getMetricsSnapshot($name, 3600);
             if ($snapshot->getTimestamp() < $cutoff) {

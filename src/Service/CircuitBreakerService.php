@@ -3,6 +3,7 @@
 namespace Tourze\Symfony\CircuitBreaker\Service;
 
 use Psr\Log\LoggerInterface;
+use Symfony\Component\DependencyInjection\Attribute\Autoconfigure;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Tourze\Symfony\CircuitBreaker\Event\CircuitFailureEvent;
 use Tourze\Symfony\CircuitBreaker\Event\CircuitSuccessEvent;
@@ -16,6 +17,7 @@ use Tourze\Symfony\CircuitBreaker\Strategy\StrategyManager;
  *
  * 基于Symfony组件实现的熔断器核心服务
  */
+#[Autoconfigure]
 class CircuitBreakerService
 {
     public function __construct(
@@ -24,7 +26,7 @@ class CircuitBreakerService
         private readonly MetricsCollector $metricsCollector,
         private readonly StrategyManager $strategyManager,
         private readonly EventDispatcherInterface $eventDispatcher,
-        private readonly LoggerInterface $logger
+        private readonly LoggerInterface $logger,
     ) {
     }
 
@@ -50,6 +52,7 @@ class CircuitBreakerService
 
             // 否则拒绝请求
             $this->metricsCollector->recordNotPermitted($name);
+
             return false;
         }
 
@@ -60,11 +63,13 @@ class CircuitBreakerService
 
             if ($currentAttempts < $permittedCalls) {
                 $this->stateManager->incrementAttemptCount($name);
+
                 return true;
             }
 
             // 超过允许的调用次数，拒绝请求
             $this->metricsCollector->recordNotPermitted($name);
+
             return false;
         }
 
@@ -78,10 +83,10 @@ class CircuitBreakerService
     {
         $state = $this->stateManager->getState($name);
         $config = $this->configService->getCircuitConfig($name);
-        
+
         // 记录成功调用
         $this->metricsCollector->recordSuccess($name, $duration);
-        
+
         // 通知策略（用于 ConsecutiveFailureStrategy）
         $strategy = $this->strategyManager->getStrategyForConfig($config);
         if ($strategy instanceof ConsecutiveFailureStrategy) {
@@ -94,7 +99,7 @@ class CircuitBreakerService
         // 如果处于半开状态，检查是否可以关闭熔断器
         if ($state->isHalfOpen()) {
             $metrics = $this->metricsCollector->getSnapshot($name, $config['sliding_window_size']);
-            
+
             if ($strategy->shouldClose($metrics, $config)) {
                 $this->stateManager->setClosed($name);
             }
@@ -116,6 +121,7 @@ class CircuitBreakerService
                 'exception' => get_class($throwable),
             ]);
             $this->recordSuccess($name, $duration);
+
             return;
         }
 
@@ -126,12 +132,13 @@ class CircuitBreakerService
                 'exception' => get_class($throwable),
             ]);
             $this->recordSuccess($name, $duration);
+
             return;
         }
 
         // 记录失败调用
         $this->metricsCollector->recordFailure($name, $duration, $throwable);
-        
+
         // 通知策略（用于 ConsecutiveFailureStrategy）
         $strategy = $this->strategyManager->getStrategyForConfig($config);
         if ($strategy instanceof ConsecutiveFailureStrategy) {
@@ -145,18 +152,19 @@ class CircuitBreakerService
         if ($state->isHalfOpen()) {
             $metrics = $this->metricsCollector->getSnapshot($name, $config['sliding_window_size']);
             $this->stateManager->setOpen($name, $metrics->getFailureRate());
+
             return;
         }
 
         // 如果处于关闭状态，检查是否应该打开熔断器
         if ($state->isClosed()) {
             $metrics = $this->metricsCollector->getSnapshot($name, $config['sliding_window_size']);
-            
+
             // 设置当前熔断器名称（用于 ConsecutiveFailureStrategy）
             if ($strategy instanceof ConsecutiveFailureStrategy) {
                 $strategy->setCurrentCircuitName($name);
             }
-            
+
             if ($strategy->shouldOpen($metrics, $config)) {
                 $this->stateManager->setOpen($name, $metrics->getFailureRate());
             }
@@ -166,40 +174,43 @@ class CircuitBreakerService
     /**
      * 执行受熔断器保护的操作
      *
-     * @param string $name 熔断器名称
-     * @param callable $operation 要执行的操作
-     * @param ?callable $fallback 熔断后的降级操作
+     * @param string    $name      熔断器名称
+     * @param callable  $operation 要执行的操作
+     * @param ?callable $fallback  熔断后的降级操作
+     *
      * @return mixed 操作结果
+     *
      * @throws CircuitOpenException 如果熔断器处于开启状态且没有降级处理
-     * @throws \Throwable 如果操作抛出异常且没有降级处理
+     * @throws \Throwable           如果操作抛出异常且没有降级处理
      */
     public function execute(string $name, callable $operation, ?callable $fallback = null): mixed
     {
         if (!$this->isAllowed($name)) {
             $this->logger->debug('Circuit breaker rejected request', ['circuit' => $name]);
-            
-            if ($fallback !== null) {
+
+            if (null !== $fallback) {
                 return $fallback();
             }
-            
+
             throw new CircuitOpenException($name);
         }
 
         $startTime = microtime(true);
-        
+
         try {
             $result = $operation();
             $duration = (microtime(true) - $startTime) * 1000; // 转换为毫秒
             $this->recordSuccess($name, $duration);
+
             return $result;
         } catch (\Throwable $throwable) {
             $duration = (microtime(true) - $startTime) * 1000; // 转换为毫秒
             $this->recordFailure($name, $throwable, $duration);
-            
-            if ($fallback !== null) {
+
+            if (null !== $fallback) {
                 return $fallback();
             }
-            
+
             throw $throwable;
         }
     }
@@ -227,7 +238,7 @@ class CircuitBreakerService
     {
         $this->stateManager->forceClose($name);
     }
-    
+
     /**
      * 检查是否被允许（兼容旧版本）
      *
@@ -257,4 +268,4 @@ class CircuitBreakerService
     {
         $this->recordFailure($name, new ManualFailureException('Manual failure mark'));
     }
-} 
+}

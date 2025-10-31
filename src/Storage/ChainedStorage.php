@@ -16,17 +16,21 @@ use Tourze\Symfony\CircuitBreaker\Model\MetricsSnapshot;
 class ChainedStorage implements CircuitBreakerStorageInterface
 {
     private const MAX_FAILURES = 3;
-private const RETRY_AFTER = 60;
+    private const RETRY_AFTER = 60;
+
     /**
      * @var array<CircuitBreakerStorageInterface>
      */
     private array $storages;
+
     private ?CircuitBreakerStorageInterface $activeStorage = null;
+
     /**
      * @var array<string, int> 存储失败计数
      */
     private array $failureCounts = [];
-        /**
+
+    /**
      * @var array<string, int> 最后失败时间
      */
     private array $lastFailureTime = []; // 60秒后重试
@@ -35,7 +39,7 @@ private const RETRY_AFTER = 60;
         RedisAtomicStorage $redisStorage,
         DoctrineStorage $doctrineStorage,
         MemoryStorage $memoryStorage,
-        private readonly LoggerInterface $logger = new NullLogger()
+        private readonly LoggerInterface $logger = new NullLogger(),
     ) {
         $this->storages = [
             $redisStorage,
@@ -47,7 +51,7 @@ private const RETRY_AFTER = 60;
     public function getState(string $name): CircuitBreakerState
     {
         return $this->executeWithFallback(
-            fn(CircuitBreakerStorageInterface $storage) => $storage->getState($name),
+            fn (CircuitBreakerStorageInterface $storage) => $storage->getState($name),
             new CircuitBreakerState()
         );
     }
@@ -56,8 +60,10 @@ private const RETRY_AFTER = 60;
      * 执行操作并在失败时进行故障转移
      *
      * @template T
+     *
      * @param callable(CircuitBreakerStorageInterface): T $operation
-     * @param T $default
+     * @param T                                           $default
+     *
      * @return T
      */
     private function executeWithFallback(callable $operation, mixed $default): mixed
@@ -75,8 +81,7 @@ private const RETRY_AFTER = 60;
 
                 // 重置失败计数
                 $storageClass = get_class($storage);
-                unset($this->failureCounts[$storageClass]);
-                unset($this->lastFailureTime[$storageClass]);
+                unset($this->failureCounts[$storageClass], $this->lastFailureTime[$storageClass]);
 
                 return $result;
             } catch (\Throwable $e) {
@@ -86,6 +91,7 @@ private const RETRY_AFTER = 60;
 
         // 所有存储都失败，返回默认值
         $this->logger->error('All storages failed, returning default value');
+
         return $default;
     }
 
@@ -111,8 +117,7 @@ private const RETRY_AFTER = 60;
             }
 
             // 重置计数器，允许重试
-            unset($this->failureCounts[$storageClass]);
-            unset($this->lastFailureTime[$storageClass]);
+            unset($this->failureCounts[$storageClass], $this->lastFailureTime[$storageClass]);
         }
 
         // 检查存储是否可用
@@ -123,6 +128,7 @@ private const RETRY_AFTER = 60;
                 'storage' => $storageClass,
                 'error' => $e->getMessage(),
             ]);
+
             return false;
         }
     }
@@ -154,7 +160,7 @@ private const RETRY_AFTER = 60;
     public function saveState(string $name, CircuitBreakerState $state): bool
     {
         return $this->executeWithFallback(
-            fn(CircuitBreakerStorageInterface $storage) => $storage->saveState($name, $state),
+            fn (CircuitBreakerStorageInterface $storage) => $storage->saveState($name, $state),
             false
         );
     }
@@ -162,8 +168,9 @@ private const RETRY_AFTER = 60;
     public function recordCall(string $name, CallResult $result): void
     {
         $this->executeWithFallback(
-            function(CircuitBreakerStorageInterface $storage) use ($name, $result) {
+            function (CircuitBreakerStorageInterface $storage) use ($name, $result) {
                 $storage->recordCall($name, $result);
+
                 return true;
             },
             null
@@ -173,7 +180,7 @@ private const RETRY_AFTER = 60;
     public function getMetricsSnapshot(string $name, int $windowSize): MetricsSnapshot
     {
         return $this->executeWithFallback(
-            fn(CircuitBreakerStorageInterface $storage) => $storage->getMetricsSnapshot($name, $windowSize),
+            fn (CircuitBreakerStorageInterface $storage) => $storage->getMetricsSnapshot($name, $windowSize),
             new MetricsSnapshot()
         );
     }
@@ -181,13 +188,13 @@ private const RETRY_AFTER = 60;
     public function getAllCircuitNames(): array
     {
         $allNames = [];
-        
+
         // 从所有可用的存储中收集熔断器名称
         foreach ($this->storages as $storage) {
             if (!$this->isStorageHealthy($storage)) {
                 continue;
             }
-            
+
             try {
                 $names = $storage->getAllCircuitNames();
                 $allNames = array_merge($allNames, $names);
@@ -198,7 +205,7 @@ private const RETRY_AFTER = 60;
                 ]);
             }
         }
-        
+
         // 去重并返回
         return array_unique($allNames);
     }
@@ -222,7 +229,7 @@ private const RETRY_AFTER = 60;
     public function acquireLock(string $name, string $token, int $ttl): bool
     {
         return $this->executeWithFallback(
-            fn(CircuitBreakerStorageInterface $storage) => $storage->acquireLock($name, $token, $ttl),
+            fn (CircuitBreakerStorageInterface $storage) => $storage->acquireLock($name, $token, $ttl),
             false
         );
     }
@@ -230,7 +237,7 @@ private const RETRY_AFTER = 60;
     public function releaseLock(string $name, string $token): bool
     {
         return $this->executeWithFallback(
-            fn(CircuitBreakerStorageInterface $storage) => $storage->releaseLock($name, $token),
+            fn (CircuitBreakerStorageInterface $storage) => $storage->releaseLock($name, $token),
             false
         );
     }
@@ -260,7 +267,7 @@ private const RETRY_AFTER = 60;
      */
     public function getActiveStorageType(): string
     {
-        if ($this->activeStorage === null) {
+        if (null === $this->activeStorage) {
             return 'none';
         }
 

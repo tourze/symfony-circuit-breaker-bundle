@@ -52,9 +52,10 @@ interface CircuitBreakerStorageInterface
     /**
      * 获取分布式锁
      *
-     * @param string $name 熔断器名称
+     * @param string $name  熔断器名称
      * @param string $token 锁令牌
-     * @param int $ttl 锁过期时间（秒）
+     * @param int    $ttl   锁过期时间（秒）
+     *
      * @return bool 是否获取成功
      */
     public function acquireLock(string $name, string $token, int $ttl): bool;
@@ -62,8 +63,9 @@ interface CircuitBreakerStorageInterface
     /**
      * 释放分布式锁
      *
-     * @param string $name 熔断器名称
+     * @param string $name  熔断器名称
      * @param string $token 锁令牌
+     *
      * @return bool 是否释放成功
      */
     public function releaseLock(string $name, string $token): bool;

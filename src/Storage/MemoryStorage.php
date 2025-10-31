@@ -37,6 +37,7 @@ class MemoryStorage implements CircuitBreakerStorageInterface
     public function saveState(string $name, CircuitBreakerState $state): bool
     {
         $this->states[$name] = $state;
+
         return true;
     }
 
@@ -53,7 +54,7 @@ class MemoryStorage implements CircuitBreakerStorageInterface
         $cutoff = time() - 120;
         $this->calls[$name] = array_filter(
             $this->calls[$name],
-            fn(CallResult $call) => $call->getTimestamp() > $cutoff
+            fn (CallResult $call) => $call->getTimestamp() > $cutoff
         );
 
         // 重新索引数组
@@ -64,7 +65,7 @@ class MemoryStorage implements CircuitBreakerStorageInterface
     {
         $calls = $this->calls[$name] ?? [];
         $windowStart = time() - $windowSize;
-        $slowCallThreshold = (float)($_ENV['CIRCUIT_BREAKER_SLOW_CALL_THRESHOLD'] ?? 1000);
+        $slowCallThreshold = (float) ($_ENV['CIRCUIT_BREAKER_SLOW_CALL_THRESHOLD'] ?? 1000);
 
         $totalCalls = 0;
         $successCalls = 0;
@@ -77,17 +78,17 @@ class MemoryStorage implements CircuitBreakerStorageInterface
                 continue;
             }
 
-            $totalCalls++;
+            ++$totalCalls;
             $totalDuration += $call->getDuration();
 
             if ($call->isSuccess()) {
-                $successCalls++;
+                ++$successCalls;
             } else {
-                $failedCalls++;
+                ++$failedCalls;
             }
 
             if ($call->isSlowCall($slowCallThreshold)) {
-                $slowCalls++;
+                ++$slowCalls;
             }
         }
 
@@ -120,7 +121,7 @@ class MemoryStorage implements CircuitBreakerStorageInterface
     public function acquireLock(string $name, string $token, int $ttl): bool
     {
         $now = time();
-        
+
         // 清理过期锁
         if (isset($this->locks[$name]) && $this->locks[$name]['expireAt'] < $now) {
             unset($this->locks[$name]);
@@ -132,6 +133,7 @@ class MemoryStorage implements CircuitBreakerStorageInterface
                 'token' => $token,
                 'expireAt' => $now + $ttl,
             ];
+
             return true;
         }
 
@@ -142,6 +144,7 @@ class MemoryStorage implements CircuitBreakerStorageInterface
     {
         if (isset($this->locks[$name]) && $this->locks[$name]['token'] === $token) {
             unset($this->locks[$name]);
+
             return true;
         }
 

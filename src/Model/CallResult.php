@@ -10,16 +10,16 @@ namespace Tourze\Symfony\CircuitBreaker\Model;
 final class CallResult
 {
     /**
-     * @param bool $success 是否成功
-     * @param float $duration 调用耗时（毫秒）
-     * @param int $timestamp 调用时间戳
+     * @param bool            $success   是否成功
+     * @param float           $duration  调用耗时（毫秒）
+     * @param int             $timestamp 调用时间戳
      * @param \Throwable|null $exception 异常信息
      */
     public function __construct(
         private readonly bool $success,
         private readonly float $duration,
         private readonly int $timestamp,
-        private readonly ?\Throwable $exception = null
+        private readonly ?\Throwable $exception = null,
     ) {
     }
 
@@ -31,7 +31,7 @@ final class CallResult
         [$type, $duration] = explode(':', $data);
 
         return new self(
-            success: $type === 'success',
+            success: 'success' === $type,
             duration: (float) $duration,
             timestamp: $timestamp
         );
@@ -73,6 +73,7 @@ final class CallResult
     public function toString(): string
     {
         $type = $this->success ? 'success' : 'failure';
+
         return sprintf('%s:%.2f', $type, $this->duration);
     }
 }

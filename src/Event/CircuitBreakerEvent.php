@@ -14,8 +14,7 @@ abstract class CircuitBreakerEvent extends Event
      */
     public function __construct(
         private readonly string $circuitName,
-    )
-    {
+    ) {
     }
 
     /**

@@ -3,6 +3,7 @@
 namespace Tourze\Symfony\CircuitBreaker\Service;
 
 use Psr\Log\LoggerInterface;
+use Symfony\Component\DependencyInjection\Attribute\Autoconfigure;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Tourze\Symfony\CircuitBreaker\Enum\CircuitState;
 use Tourze\Symfony\CircuitBreaker\Event\CircuitClosedEvent;
@@ -16,13 +17,16 @@ use Tourze\Symfony\CircuitBreaker\Storage\CircuitBreakerStorageInterface;
  *
  * 负责管理和转换熔断器状态
  */
+#[Autoconfigure]
 class StateManager
 {
-private const CACHE_TTL = 1;
+    private const CACHE_TTL = 1;
+
     /**
      * @var array<string, CircuitBreakerState> 本地缓存
      */
     private array $localCache = [];
+
     /**
      * @var array<string, int> 缓存时间戳
      */
@@ -31,7 +35,7 @@ private const CACHE_TTL = 1;
     public function __construct(
         private readonly CircuitBreakerStorageInterface $storage,
         private readonly EventDispatcherInterface $eventDispatcher,
-        private readonly LoggerInterface $logger
+        private readonly LoggerInterface $logger,
     ) {
     }
 
@@ -70,8 +74,8 @@ private const CACHE_TTL = 1;
     public function getState(string $name): CircuitBreakerState
     {
         // 检查本地缓存
-        if (isset($this->localCache[$name]) &&
-            time() - ($this->cacheTimestamps[$name] ?? 0) < self::CACHE_TTL) {
+        if (isset($this->localCache[$name])
+            && time() - ($this->cacheTimestamps[$name] ?? 0) < self::CACHE_TTL) {
             return $this->localCache[$name];
         }
 
@@ -90,8 +94,7 @@ private const CACHE_TTL = 1;
      */
     private function clearLocalCache(string $name): void
     {
-        unset($this->localCache[$name]);
-        unset($this->cacheTimestamps[$name]);
+        unset($this->localCache[$name], $this->cacheTimestamps[$name]);
     }
 
     /**
@@ -110,7 +113,7 @@ private const CACHE_TTL = 1;
         $state = new CircuitBreakerState();
         $this->storage->saveState($name, $state);
         $this->clearLocalCache($name);
-        
+
         $this->logger->info('Circuit breaker reset', [
             'circuit' => $name,
         ]);
@@ -122,7 +125,7 @@ private const CACHE_TTL = 1;
     public function forceOpen(string $name): void
     {
         $this->setOpen($name);
-        
+
         $this->logger->info('Circuit breaker force opened', [
             'circuit' => $name,
         ]);
@@ -133,7 +136,7 @@ private const CACHE_TTL = 1;
      */
     public function setOpen(string $name, float $failureRate = 100.0): void
     {
-        $this->transitionState($name, CircuitState::OPEN, function() use ($name, $failureRate) {
+        $this->transitionState($name, CircuitState::OPEN, function () use ($name, $failureRate): void {
             $this->eventDispatcher->dispatch(new CircuitOpenedEvent($name, $failureRate));
 
             $this->logger->warning('Circuit breaker opened', [
@@ -159,7 +162,7 @@ private const CACHE_TTL = 1;
                     $this->clearLocalCache($name);
 
                     // 执行回调
-                    if ($callback !== null) {
+                    if (null !== $callback) {
                         $callback();
                     }
                 } else {
@@ -196,7 +199,7 @@ private const CACHE_TTL = 1;
      */
     public function setClosed(string $name): void
     {
-        $this->transitionState($name, CircuitState::CLOSED, function() use ($name) {
+        $this->transitionState($name, CircuitState::CLOSED, function () use ($name): void {
             $this->eventDispatcher->dispatch(new CircuitClosedEvent($name));
 
             $this->logger->info('Circuit breaker closed', [
@@ -220,6 +223,7 @@ private const CACHE_TTL = 1;
 
         if ($elapsedTime >= $waitDuration) {
             $this->setHalfOpen($name);
+
             return true;
         }
 
@@ -231,7 +235,7 @@ private const CACHE_TTL = 1;
      */
     public function setHalfOpen(string $name): void
     {
-        $this->transitionState($name, CircuitState::HALF_OPEN, function() use ($name) {
+        $this->transitionState($name, CircuitState::HALF_OPEN, function () use ($name): void {
             $this->eventDispatcher->dispatch(new CircuitHalfOpenEvent($name));
 
             $this->logger->info('Circuit breaker transitioned to half-open', [

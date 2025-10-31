@@ -2,20 +2,25 @@
 
 namespace Tourze\Symfony\CircuitBreaker\Tests\Strategy;
 
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use Tourze\Symfony\CircuitBreaker\Model\MetricsSnapshot;
 use Tourze\Symfony\CircuitBreaker\Strategy\SlowCallStrategy;
 
-class SlowCallStrategyTest extends TestCase
+/**
+ * @internal
+ */
+#[CoversClass(SlowCallStrategy::class)]
+final class SlowCallStrategyTest extends TestCase
 {
     private SlowCallStrategy $strategy;
-    
+
     public function testGetName(): void
     {
         $this->assertEquals('slow_call', $this->strategy->getName());
     }
-    
-    public function testShouldOpen_withInsufficientCalls(): void
+
+    public function testShouldOpenWithInsufficientCalls(): void
     {
         $metrics = new MetricsSnapshot(
             totalCalls: 5,
@@ -24,13 +29,13 @@ class SlowCallStrategyTest extends TestCase
 
         $config = [
             'minimum_number_of_calls' => 10,
-            'slow_call_rate_threshold' => 50
+            'slow_call_rate_threshold' => 50,
         ];
 
         $this->assertFalse($this->strategy->shouldOpen($metrics, $config));
     }
-    
-    public function testShouldOpen_withHighSlowCallRate(): void
+
+    public function testShouldOpenWithHighSlowCallRate(): void
     {
         $metrics = new MetricsSnapshot(
             totalCalls: 100,
@@ -41,13 +46,13 @@ class SlowCallStrategyTest extends TestCase
 
         $config = [
             'minimum_number_of_calls' => 10,
-            'slow_call_rate_threshold' => 50
+            'slow_call_rate_threshold' => 50,
         ];
 
         $this->assertTrue($this->strategy->shouldOpen($metrics, $config));
     }
-    
-    public function testShouldOpen_withLowSlowCallRate(): void
+
+    public function testShouldOpenWithLowSlowCallRate(): void
     {
         $metrics = new MetricsSnapshot(
             totalCalls: 100,
@@ -58,13 +63,13 @@ class SlowCallStrategyTest extends TestCase
 
         $config = [
             'minimum_number_of_calls' => 10,
-            'slow_call_rate_threshold' => 50
+            'slow_call_rate_threshold' => 50,
         ];
 
         $this->assertFalse($this->strategy->shouldOpen($metrics, $config));
     }
-    
-    public function testShouldOpen_exactlyAtThreshold(): void
+
+    public function testShouldOpenExactlyAtThreshold(): void
     {
         $metrics = new MetricsSnapshot(
             totalCalls: 100,
@@ -75,13 +80,13 @@ class SlowCallStrategyTest extends TestCase
 
         $config = [
             'minimum_number_of_calls' => 10,
-            'slow_call_rate_threshold' => 50
+            'slow_call_rate_threshold' => 50,
         ];
 
         $this->assertTrue($this->strategy->shouldOpen($metrics, $config));
     }
-    
-    public function testShouldClose_withInsufficientCalls(): void
+
+    public function testShouldCloseWithInsufficientCalls(): void
     {
         $metrics = new MetricsSnapshot(
             totalCalls: 3,
@@ -91,13 +96,13 @@ class SlowCallStrategyTest extends TestCase
 
         $config = [
             'permitted_number_of_calls_in_half_open_state' => 5,
-            'slow_call_rate_threshold' => 50
+            'slow_call_rate_threshold' => 50,
         ];
 
         $this->assertFalse($this->strategy->shouldClose($metrics, $config));
     }
-    
-    public function testShouldClose_withLowSlowCallRate(): void
+
+    public function testShouldCloseWithLowSlowCallRate(): void
     {
         $metrics = new MetricsSnapshot(
             totalCalls: 10,
@@ -108,13 +113,13 @@ class SlowCallStrategyTest extends TestCase
 
         $config = [
             'permitted_number_of_calls_in_half_open_state' => 5,
-            'slow_call_rate_threshold' => 50
+            'slow_call_rate_threshold' => 50,
         ];
 
         $this->assertTrue($this->strategy->shouldClose($metrics, $config));
     }
-    
-    public function testShouldClose_withHighSlowCallRate(): void
+
+    public function testShouldCloseWithHighSlowCallRate(): void
     {
         $metrics = new MetricsSnapshot(
             totalCalls: 10,
@@ -125,13 +130,13 @@ class SlowCallStrategyTest extends TestCase
 
         $config = [
             'permitted_number_of_calls_in_half_open_state' => 5,
-            'slow_call_rate_threshold' => 50
+            'slow_call_rate_threshold' => 50,
         ];
 
         $this->assertFalse($this->strategy->shouldClose($metrics, $config));
     }
-    
-    public function testShouldOpen_withMissingConfig_usesDefaults(): void
+
+    public function testShouldOpenWithMissingConfigUsesDefaults(): void
     {
         $metrics = new MetricsSnapshot(
             totalCalls: 100,
@@ -144,8 +149,8 @@ class SlowCallStrategyTest extends TestCase
         // Default slow_call_rate_threshold is 50
         $this->assertTrue($this->strategy->shouldOpen($metrics, $config));
     }
-    
-    public function testShouldOpen_withZeroTotalCalls(): void
+
+    public function testShouldOpenWithZeroTotalCalls(): void
     {
         $metrics = new MetricsSnapshot(
             totalCalls: 0,
@@ -154,14 +159,16 @@ class SlowCallStrategyTest extends TestCase
 
         $config = [
             'minimum_number_of_calls' => 10,
-            'slow_call_rate_threshold' => 50
+            'slow_call_rate_threshold' => 50,
         ];
 
         $this->assertFalse($this->strategy->shouldOpen($metrics, $config));
     }
-    
+
     protected function setUp(): void
     {
+        parent::setUp();
+
         $this->strategy = new SlowCallStrategy();
     }
 }

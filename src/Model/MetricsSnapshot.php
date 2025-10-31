@@ -10,13 +10,13 @@ namespace Tourze\Symfony\CircuitBreaker\Model;
 final class MetricsSnapshot
 {
     /**
-     * @param int $totalCalls 总调用次数
-     * @param int $successCalls 成功调用次数
-     * @param int $failedCalls 失败调用次数
-     * @param int $slowCalls 慢调用次数
-     * @param int $notPermittedCalls 被拒绝的调用次数
-     * @param float $avgResponseTime 平均响应时间（毫秒）
-     * @param int $timestamp 快照时间戳
+     * @param int   $totalCalls        总调用次数
+     * @param int   $successCalls      成功调用次数
+     * @param int   $failedCalls       失败调用次数
+     * @param int   $slowCalls         慢调用次数
+     * @param int   $notPermittedCalls 被拒绝的调用次数
+     * @param float $avgResponseTime   平均响应时间（毫秒）
+     * @param int   $timestamp         快照时间戳
      */
     public function __construct(
         private readonly int $totalCalls = 0,
@@ -25,12 +25,14 @@ final class MetricsSnapshot
         private readonly int $slowCalls = 0,
         private readonly int $notPermittedCalls = 0,
         private readonly float $avgResponseTime = 0.0,
-        private readonly int $timestamp = 0
+        private readonly int $timestamp = 0,
     ) {
     }
 
     /**
      * 从数组创建
+     *
+     * @param array<string, mixed> $data
      */
     public static function fromArray(array $data): self
     {
@@ -82,6 +84,8 @@ final class MetricsSnapshot
 
     /**
      * 转换为数组
+     *
+     * @return array<string, mixed>
      */
     public function toArray(): array
     {
@@ -104,7 +108,7 @@ final class MetricsSnapshot
      */
     public function getFailureRate(): float
     {
-        if ($this->totalCalls === 0) {
+        if (0 === $this->totalCalls) {
             return 0.0;
         }
 
@@ -116,7 +120,7 @@ final class MetricsSnapshot
      */
     public function getSuccessRate(): float
     {
-        if ($this->totalCalls === 0) {
+        if (0 === $this->totalCalls) {
             return 0.0;
         }
 
@@ -128,7 +132,7 @@ final class MetricsSnapshot
      */
     public function getSlowCallRate(): float
     {
-        if ($this->totalCalls === 0) {
+        if (0 === $this->totalCalls) {
             return 0.0;
         }
 

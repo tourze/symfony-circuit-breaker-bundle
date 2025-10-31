@@ -1,25 +1,45 @@
 services:
-  # default configuration for services in *this* file
-  _defaults:
-    autowire: true      # Automatically injects dependencies in your services.
-    autoconfigure: true # Automatically registers your services as commands, event subscribers, etc.
+    # 基础配置
+    _defaults:
+        autowire: true
+        autoconfigure: true
+        public: false
 
-  # 自动注册所有类
-  Tourze\Symfony\CircuitBreaker\:
-    resource: '../../*'
-    exclude:
-      - '../../DependencyInjection/'
-      - '../../Resources/'
-      - '../../Tests/'
-      - '../../CircuitBreakerBundle.php'
+    # 明确定义所有服务
+    
+    # Commands
+    Tourze\Symfony\CircuitBreaker\Command\CircuitBreakerStatusCommand:
+        public: true
 
-  # 存储服务配置
-  Tourze\Symfony\CircuitBreaker\Storage\ChainedStorage:
-    arguments:
-      $redisStorage: '@Tourze\Symfony\CircuitBreaker\Storage\RedisAtomicStorage'
-      $doctrineStorage: '@Tourze\Symfony\CircuitBreaker\Storage\DoctrineStorage'
-      $memoryStorage: '@Tourze\Symfony\CircuitBreaker\Storage\MemoryStorage'
+    # Services
+    Tourze\Symfony\CircuitBreaker\Service\CircuitBreakerConfigService: ~
+    Tourze\Symfony\CircuitBreaker\Service\CircuitBreakerRegistry: ~
+    Tourze\Symfony\CircuitBreaker\Service\CircuitBreakerService: ~
+    Tourze\Symfony\CircuitBreaker\Service\CircuitBreakerHttpClient: ~
+    Tourze\Symfony\CircuitBreaker\Service\MetricsCollector: ~
+    Tourze\Symfony\CircuitBreaker\Service\StateManager: ~
 
-  # 主要存储服务别名
-  Tourze\Symfony\CircuitBreaker\Storage\CircuitBreakerStorageInterface:
-    alias: Tourze\Symfony\CircuitBreaker\Storage\ChainedStorage
+    # Storage
+    Tourze\Symfony\CircuitBreaker\Storage\MemoryStorage: ~
+    Tourze\Symfony\CircuitBreaker\Storage\DoctrineStorage: ~
+    Tourze\Symfony\CircuitBreaker\Storage\RedisAtomicStorage: ~
+    Tourze\Symfony\CircuitBreaker\Storage\ChainedStorage: ~
+
+    # Strategies
+    Tourze\Symfony\CircuitBreaker\Strategy\StrategyManager: ~
+    Tourze\Symfony\CircuitBreaker\Strategy\ConsecutiveFailureStrategy: ~
+    Tourze\Symfony\CircuitBreaker\Strategy\FailureRateStrategy: ~
+    Tourze\Symfony\CircuitBreaker\Strategy\SlowCallStrategy: ~
+
+    # EventSubscribers
+    Tourze\Symfony\CircuitBreaker\EventSubscriber\CircuitBreakerEventSubscriber: ~
+    Tourze\Symfony\CircuitBreaker\EventSubscriber\CircuitBreakerResponseEventSubscriber: ~
+
+
+
+    # 接口默认实现
+    Tourze\Symfony\CircuitBreaker\Storage\CircuitBreakerStorageInterface:
+        class: Tourze\Symfony\CircuitBreaker\Storage\MemoryStorage
+
+    Tourze\Symfony\CircuitBreaker\Strategy\CircuitBreakerStrategyInterface:
+        class: Tourze\Symfony\CircuitBreaker\Strategy\ConsecutiveFailureStrategy

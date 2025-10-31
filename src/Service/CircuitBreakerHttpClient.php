@@ -2,6 +2,7 @@
 
 namespace Tourze\Symfony\CircuitBreaker\Service;
 
+use Psr\Log\LoggerInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 use Symfony\Contracts\HttpClient\ResponseInterface;
 use Symfony\Contracts\HttpClient\ResponseStreamInterface;
@@ -13,30 +14,16 @@ use Symfony\Contracts\HttpClient\ResponseStreamInterface;
  */
 class CircuitBreakerHttpClient implements HttpClientInterface
 {
-    private CircuitBreakerService $circuitBreakerService;
-    private HttpClientInterface $httpClient;
-    
-    /**
-     * 服务名称前缀
-     */
-    private string $servicePrefix;
-    
-    /**
-     * 降级响应工厂（可选）
-     *
-     * @var callable|null
-     */
+    /** @var callable|null */
     private $fallbackFactory;
 
     public function __construct(
-        CircuitBreakerService $circuitBreakerService,
-        HttpClientInterface $httpClient,
-        string $servicePrefix = 'http_client_',
-        ?callable $fallbackFactory = null
+        private readonly CircuitBreakerService $circuitBreakerService,
+        private readonly HttpClientInterface $httpClient,
+        private readonly LoggerInterface $logger,
+        private readonly string $servicePrefix = 'http_client_',
+        ?callable $fallbackFactory = null,
     ) {
-        $this->circuitBreakerService = $circuitBreakerService;
-        $this->httpClient = $httpClient;
-        $this->servicePrefix = $servicePrefix;
         $this->fallbackFactory = $fallbackFactory;
     }
 
@@ -46,29 +33,77 @@ class CircuitBreakerHttpClient implements HttpClientInterface
     private function generateServiceName(string $url): string
     {
         $host = parse_url($url, PHP_URL_HOST);
-        $host = $host !== false && $host !== null ? $host : 'unknown';
+        $host = false !== $host && null !== $host ? $host : 'unknown';
+
         return $this->servicePrefix . $host;
     }
 
     /**
-     * {@inheritdoc}
+     * @param array<string, mixed> $options
+     * @phpstan-ignore-next-line method.childParameterType Interface constraint prevents specific typing
      */
     public function request(string $method, string $url, array $options = []): ResponseInterface
     {
         $serviceName = $this->generateServiceName($url);
-        
+        $startTime = microtime(true);
+
+        // 记录请求开始日志
+        $this->logger->info('HTTP请求开始', [
+            'service' => $serviceName,
+            'method' => $method,
+            'url' => $url,
+            'timestamp' => $startTime,
+        ]);
+
         return $this->circuitBreakerService->execute(
             $serviceName,
-            function () use ($method, $url, $options) {
-                return $this->httpClient->request($method, $url, $options);
+            function () use ($method, $url, $options, $startTime) {
+                try {
+                    $response = $this->httpClient->request($method, $url, $options);
+                    $duration = (microtime(true) - $startTime) * 1000;
+
+                    // 记录成功响应日志
+                    $this->logger->info('HTTP请求成功', [
+                        'service' => $this->generateServiceName($url),
+                        'method' => $method,
+                        'url' => $url,
+                        'status_code' => $response->getStatusCode(),
+                        'duration_ms' => round($duration, 2),
+                    ]);
+
+                    return $response;
+                } catch (\Throwable $e) {
+                    $duration = (microtime(true) - $startTime) * 1000;
+
+                    // 记录异常日志
+                    $this->logger->error('HTTP请求异常', [
+                        'service' => $this->generateServiceName($url),
+                        'method' => $method,
+                        'url' => $url,
+                        'exception' => get_class($e),
+                        'message' => $e->getMessage(),
+                        'duration_ms' => round($duration, 2),
+                    ]);
+
+                    throw $e;
+                }
             },
-            $this->fallbackFactory !== null ? fn() => ($this->fallbackFactory)($method, $url, $options) : null
+            null !== $this->fallbackFactory ? function () use ($method, $url, $options, $startTime) {
+                $duration = (microtime(true) - $startTime) * 1000;
+
+                // 记录降级处理日志
+                $this->logger->warning('HTTP请求使用降级处理', [
+                    'service' => $this->generateServiceName($url),
+                    'method' => $method,
+                    'url' => $url,
+                    'duration_ms' => round($duration, 2),
+                ]);
+
+                return null !== $this->fallbackFactory ? ($this->fallbackFactory)($method, $url, $options) : null;
+            } : null
         );
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function stream($responses, ?float $timeout = null): ResponseStreamInterface
     {
         // 对响应流不做熔断处理，直接透传
@@ -76,13 +111,18 @@ class CircuitBreakerHttpClient implements HttpClientInterface
     }
 
     /**
-     * {@inheritdoc}
+     * @param array<string, mixed> $options
+     * @phpstan-ignore-next-line method.childParameterType Interface constraint prevents specific typing
      */
     public function withOptions(array $options): static
     {
-        $new = clone $this;
-        $new->httpClient = $this->httpClient->withOptions($options);
-        
-        return $new;
+        // @phpstan-ignore-next-line 返回类型static在PHPStan中的处理复杂，这里ignore是必要的
+        return new self(
+            $this->circuitBreakerService,
+            $this->httpClient->withOptions($options),
+            $this->logger,
+            $this->servicePrefix,
+            $this->fallbackFactory,
+        );
     }
 }

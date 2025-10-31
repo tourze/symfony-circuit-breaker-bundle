@@ -2,15 +2,20 @@
 
 namespace Tourze\Symfony\CircuitBreaker\Tests\Attribute;
 
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use Tourze\Symfony\CircuitBreaker\Attribute\CircuitBreaker;
 
-class CircuitBreakerTest extends TestCase
+/**
+ * @internal
+ */
+#[CoversClass(CircuitBreaker::class)]
+final class CircuitBreakerTest extends TestCase
 {
-    public function testConstructor_withRequiredParamsOnly()
+    public function testConstructorWithRequiredParamsOnly(): void
     {
         $circuitBreaker = new CircuitBreaker('api.service');
-        
+
         $this->assertEquals('api.service', $circuitBreaker->name);
         $this->assertNull($circuitBreaker->fallbackMethod);
         $this->assertEquals(50, $circuitBreaker->failureRateThreshold);
@@ -22,8 +27,8 @@ class CircuitBreakerTest extends TestCase
         $this->assertEmpty($circuitBreaker->recordExceptions);
         $this->assertEmpty($circuitBreaker->ignoreExceptions);
     }
-    
-    public function testConstructor_withAllParams()
+
+    public function testConstructorWithAllParams(): void
     {
         $circuitBreaker = new CircuitBreaker(
             name: 'test.service',
@@ -37,7 +42,7 @@ class CircuitBreakerTest extends TestCase
             recordExceptions: ['\RuntimeException', '\LogicException'],
             ignoreExceptions: ['\InvalidArgumentException']
         );
-        
+
         $this->assertEquals('test.service', $circuitBreaker->name);
         $this->assertEquals('fallbackAction', $circuitBreaker->fallbackMethod);
         $this->assertEquals(75, $circuitBreaker->failureRateThreshold);
@@ -49,24 +54,24 @@ class CircuitBreakerTest extends TestCase
         $this->assertEquals(['\RuntimeException', '\LogicException'], $circuitBreaker->recordExceptions);
         $this->assertEquals(['\InvalidArgumentException'], $circuitBreaker->ignoreExceptions);
     }
-    
-    public function testInstanceProperties_areReadonly()
+
+    public function testInstancePropertiesAreReadonly(): void
     {
         $reflection = new \ReflectionProperty(CircuitBreaker::class, 'name');
         $this->assertTrue($reflection->isReadOnly());
-        
+
         $reflection = new \ReflectionProperty(CircuitBreaker::class, 'failureRateThreshold');
         $this->assertTrue($reflection->isReadOnly());
     }
-    
-    public function testAttribute_isTargetedOnMethods()
+
+    public function testAttributeIsTargetedOnMethods(): void
     {
         $reflection = new \ReflectionClass(CircuitBreaker::class);
         $attributes = $reflection->getAttributes(\Attribute::class);
-        
+
         $this->assertCount(1, $attributes);
         $attribute = $attributes[0]->newInstance();
-        
+
         $this->assertEquals(\Attribute::TARGET_METHOD, $attribute->flags);
     }
-} 
+}

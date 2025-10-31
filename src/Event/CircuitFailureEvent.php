@@ -10,12 +10,12 @@ namespace Tourze\Symfony\CircuitBreaker\Event;
 final class CircuitFailureEvent extends CircuitBreakerEvent
 {
     /**
-     * @param string $circuitName 熔断器名称
-     * @param \Throwable $throwable 抛出的异常
+     * @param string     $circuitName 熔断器名称
+     * @param \Throwable $throwable   抛出的异常
      */
     public function __construct(
         string $circuitName,
-        private readonly \Throwable $throwable
+        private readonly \Throwable $throwable,
     ) {
         parent::__construct($circuitName);
     }

@@ -15,7 +15,7 @@ class ConsecutiveFailureStrategy implements CircuitBreakerStrategyInterface
      * @var array<string, int> 连续失败计数
      */
     private array $consecutiveFailures = [];
-    
+
     /**
      * @var string|null 当前评估的熔断器名称
      */
@@ -24,14 +24,15 @@ class ConsecutiveFailureStrategy implements CircuitBreakerStrategyInterface
     public function shouldOpen(MetricsSnapshot $metrics, array $config): bool
     {
         $consecutiveFailureThreshold = $config['consecutive_failure_threshold'] ?? 5;
-        
+
         // 如果没有设置当前熔断器名称，无法评估
-        if ($this->currentCircuitName === null) {
+        if (null === $this->currentCircuitName) {
             return false;
         }
-        
+
         // 检查当前熔断器的连续失败次数
         $count = $this->consecutiveFailures[$this->currentCircuitName] ?? 0;
+
         return $count >= $consecutiveFailureThreshold;
     }
 
@@ -59,7 +60,7 @@ class ConsecutiveFailureStrategy implements CircuitBreakerStrategyInterface
             $this->consecutiveFailures[$name] = ($this->consecutiveFailures[$name] ?? 0) + 1;
         }
     }
-    
+
     /**
      * 设置当前评估的熔断器名称
      */

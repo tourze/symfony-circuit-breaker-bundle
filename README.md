@@ -1,8 +1,39 @@
 # Symfony Circuit Breaker Bundle
 
-[![Latest Version](https://img.shields.io/packagist/v/tourze/symfony-circuit-breaker-bundle.svg?style=flat-square)](https://packagist.org/packages/tourze/symfony-circuit-breaker-bundle)
+[English](README.md) | [中文](README.zh-CN.md)
 
-Symfony熔断器Bundle，为Symfony应用提供高性能、可扩展的熔断器功能，支持单机和集群环境，帮助您构建更健壮的微服务应用。
+[![Latest Version](https://img.shields.io/packagist/v/tourze/symfony-circuit-breaker-bundle.svg?style=flat-square)](https://packagist.org/packages/tourze/symfony-circuit-breaker-bundle)
+[![PHP Version Require](https://img.shields.io/packagist/php-v/tourze/symfony-circuit-breaker-bundle?style=flat-square)](https://packagist.org/packages/tourze/symfony-circuit-breaker-bundle)
+
+[![License](https://img.shields.io/packagist/l/tourze/symfony-circuit-breaker-bundle?style=flat-square)](LICENSE)
+[![Build Status](https://img.shields.io/github/workflow/status/tourze/symfony-circuit-breaker-bundle/CI?style=flat-square)](https://github.com/tourze/php-monorepo/actions)
+[![Coverage Status](https://img.shields.io/codecov/c/github/tourze/php-monorepo?style=flat-square)](https://codecov.io/gh/tourze/php-monorepo)
+
+Symfony熔断器Bundle，为Symfony应用提供高性能、可扩展的熔断器功能，
+支持单机和集群环境，帮助您构建更健壮的微服务应用。
+
+## Table of Contents
+
+- [功能特性](#功能特性)
+- [安装](#安装)
+- [快速开始](#快速开始)
+  - [使用注解（Attribute）方式](#使用注解attribute方式)
+  - [直接使用服务](#直接使用服务)
+  - [使用带熔断功能的HTTP客户端](#使用带熔断功能的http客户端)
+- [Configuration](#configuration)
+  - [Environment Variable Configuration](#environment-variable-configuration)
+  - [Configuration Parameters](#configuration-parameters)
+- [Dependencies](#dependencies)
+  - [Required Dependencies](#required-dependencies)
+  - [Optional Dependencies](#optional-dependencies)
+  - [Storage Backends](#storage-backends)
+- [命令行工具](#命令行工具)
+- [高级用法](#高级用法)
+  - [手动管理熔断状态](#手动管理熔断状态)
+  - [自定义HTTP客户端降级处理](#自定义http客户端降级处理)
+- [贡献指南](#贡献指南)
+- [参考资料](#参考资料)
+- [许可证](#许可证)
 
 ## 功能特性
 
@@ -158,6 +189,78 @@ $client = $container->get('circuit_breaker.http_client');
 $client = $this->get('circuit_breaker.http_client');
 ```
 
+## Configuration
+
+### Environment Variable Configuration
+
+Circuit breaker supports configuration through environment variables, which can be set in the `.env` file:
+
+```env
+# Global default configuration
+CIRCUIT_BREAKER_FAILURE_RATE_THRESHOLD=50
+CIRCUIT_BREAKER_MINIMUM_NUMBER_OF_CALLS=10
+CIRCUIT_BREAKER_PERMITTED_NUMBER_OF_CALLS_IN_HALF_OPEN_STATE=5
+CIRCUIT_BREAKER_WAIT_DURATION_IN_OPEN_STATE=60
+CIRCUIT_BREAKER_SLIDING_WINDOW_SIZE=100
+CIRCUIT_BREAKER_SLOW_CALL_DURATION_THRESHOLD=1000
+CIRCUIT_BREAKER_SLOW_CALL_RATE_THRESHOLD=50
+CIRCUIT_BREAKER_CONSECUTIVE_FAILURE_THRESHOLD=5
+
+# Service-specific configuration (API_USERS example)
+API_USERS_FAILURE_RATE_THRESHOLD=30
+API_USERS_MINIMUM_NUMBER_OF_CALLS=5
+API_USERS_WAIT_DURATION_IN_OPEN_STATE=30
+```
+
+## Configuration Parameters
+
+- `FAILURE_RATE_THRESHOLD`: Failure rate threshold (percentage)
+- `MINIMUM_NUMBER_OF_CALLS`: Minimum number of calls
+- `PERMITTED_NUMBER_OF_CALLS_IN_HALF_OPEN_STATE`: Allowed calls in half-open state
+- `WAIT_DURATION_IN_OPEN_STATE`: Wait duration in open state (seconds)
+- `SLIDING_WINDOW_SIZE`: Sliding window size
+- `SLOW_CALL_DURATION_THRESHOLD`: Slow call duration threshold (milliseconds)
+- `SLOW_CALL_RATE_THRESHOLD`: Slow call rate threshold (percentage)
+- `CONSECUTIVE_FAILURE_THRESHOLD`: Consecutive failure threshold
+
+## Dependencies
+
+### Required Dependencies
+
+- **PHP**: 8.1 or higher
+- **Symfony**: 6.4 or higher
+- **PSR/Log**: For logging functionality
+
+### Optional Dependencies
+
+- **Redis**: For high-performance storage (recommended)
+- **Doctrine DBAL**: For database storage fallback
+- **Symfony/HttpClient**: For HTTP client circuit breaker functionality
+
+### Storage Backends
+
+#### Redis Storage (Recommended)
+
+For production environments with high performance requirements:
+
+```env
+# Redis connection configuration
+REDIS_URL="redis://localhost:6379"
+```
+
+#### Doctrine Storage
+
+When Redis is unavailable, automatically fallback to Doctrine storage:
+
+```env
+# Database connection configuration
+DATABASE_URL="mysql://user:pass@127.0.0.1:3306/dbname"
+```
+
+#### Memory Storage
+
+For development and testing only, does not support multiple instances.
+
 ## 命令行工具
 
 查看熔断器配置信息：
@@ -285,6 +388,41 @@ class HttpClientFallbackFactory
     }
 }
 ```
+
+## 贡献指南
+
+我们欢迎任何形式的贡献！请在贡献之前阅读以下指南：
+
+### 如何贡献
+
+1. **报告问题**：如果您发现了 bug 或有功能请求，请在 [GitHub Issues](https://github.com/tourze/php-monorepo/issues) 中创建一个 issue
+2. **代码贡献**：
+    - Fork 本仓库
+    - 创建新的功能分支 (`git checkout -b feature/amazing-feature`)
+    - 提交您的更改 (`git commit -m 'Add some amazing feature'`)
+    - 推送到分支 (`git push origin feature/amazing-feature`)
+    - 创建 Pull Request
+
+### 代码风格
+
+- 遵循 PSR-12 编码标准
+- 使用 PHP 8.1+ 的现代语法特性
+- 所有公共方法必须有完整的 PHPDoc 注释
+- 变量和方法命名使用有意义的英文描述
+
+### 测试要求
+
+- 所有新功能必须包含相应的单元测试
+- 测试覆盖率应保持在 80% 以上
+- 运行测试：`./vendor/bin/phpunit packages/symfony-circuit-breaker-bundle/tests`
+- 代码质量检查：`./vendor/bin/phpstan analyse packages/symfony-circuit-breaker-bundle`
+
+### Pull Request 指南
+
+- PR 标题应该清晰描述更改内容
+- 包含详细的更改说明
+- 确保所有测试通过
+- 保持 commit 历史的整洁
 
 ## 参考资料
 

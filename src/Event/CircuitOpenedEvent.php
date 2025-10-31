@@ -11,11 +11,11 @@ final class CircuitOpenedEvent extends CircuitBreakerEvent
 {
     /**
      * @param string $circuitName 熔断器名称
-     * @param float $failureRate 失败率
+     * @param float  $failureRate 失败率
      */
     public function __construct(
         string $circuitName,
-        private readonly float $failureRate
+        private readonly float $failureRate,
     ) {
         parent::__construct($circuitName);
     }

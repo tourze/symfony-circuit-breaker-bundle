@@ -2,24 +2,29 @@
 
 namespace Tourze\Symfony\CircuitBreaker\Tests\Storage;
 
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use Tourze\Symfony\CircuitBreaker\Enum\CircuitState;
 use Tourze\Symfony\CircuitBreaker\Model\CallResult;
 use Tourze\Symfony\CircuitBreaker\Model\CircuitBreakerState;
 use Tourze\Symfony\CircuitBreaker\Storage\MemoryStorage;
 
-class MemoryStorageTest extends TestCase
+/**
+ * @internal
+ */
+#[CoversClass(MemoryStorage::class)]
+final class MemoryStorageTest extends TestCase
 {
     private MemoryStorage $storage;
-    
-    public function testGetState_returnsDefaultState(): void
+
+    public function testGetStateReturnsDefaultState(): void
     {
         $state = $this->storage->getState('test');
 
         $this->assertInstanceOf(CircuitBreakerState::class, $state);
         $this->assertTrue($state->isClosed());
     }
-    
+
     public function testSaveAndGetState(): void
     {
         $state = new CircuitBreakerState(CircuitState::OPEN);
@@ -29,7 +34,7 @@ class MemoryStorageTest extends TestCase
         $retrievedState = $this->storage->getState('test');
         $this->assertTrue($retrievedState->isOpen());
     }
-    
+
     public function testRecordCall(): void
     {
         $result = new CallResult(
@@ -45,8 +50,8 @@ class MemoryStorageTest extends TestCase
         $this->assertEquals(1, $metrics->getSuccessCalls());
         $this->assertEquals(0, $metrics->getFailedCalls());
     }
-    
-    public function testGetMetricsSnapshot_withTimeWindow(): void
+
+    public function testGetMetricsSnapshotWithTimeWindow(): void
     {
         $now = time();
 
@@ -80,7 +85,7 @@ class MemoryStorageTest extends TestCase
         $this->assertEquals(1, $metrics->getFailedCalls());
         $this->assertEquals(150.0, $metrics->getAvgResponseTime());
     }
-    
+
     public function testGetAllCircuitNames(): void
     {
         $this->storage->saveState('circuit1', new CircuitBreakerState());
@@ -94,7 +99,7 @@ class MemoryStorageTest extends TestCase
         $this->assertContains('circuit2', $names);
         $this->assertContains('circuit3', $names);
     }
-    
+
     public function testDeleteCircuit(): void
     {
         $this->storage->saveState('test', new CircuitBreakerState(CircuitState::OPEN));
@@ -108,13 +113,13 @@ class MemoryStorageTest extends TestCase
         $metrics = $this->storage->getMetricsSnapshot('test', 60);
         $this->assertEquals(0, $metrics->getTotalCalls());
     }
-    
+
     public function testAcquireLock(): void
     {
         $this->assertTrue($this->storage->acquireLock('test', 'token1', 5));
         $this->assertFalse($this->storage->acquireLock('test', 'token2', 5));
     }
-    
+
     public function testReleaseLock(): void
     {
         $this->storage->acquireLock('test', 'token1', 5);
@@ -125,17 +130,72 @@ class MemoryStorageTest extends TestCase
         // After release, should be able to acquire again
         $this->assertTrue($this->storage->acquireLock('test', 'token2', 5));
     }
-    
+
     public function testIsAvailable(): void
     {
         $this->assertTrue($this->storage->isAvailable());
     }
-    
+
+    public function testClearRemovesAllData(): void
+    {
+        // Add some data
+        $state = new CircuitBreakerState(CircuitState::OPEN);
+        $this->storage->saveState('test-circuit', $state);
+
+        $result = new CallResult(true, 100.0, time());
+        $this->storage->recordCall('test-circuit', $result);
+
+        $this->storage->acquireLock('test-circuit', 'token1', 60);
+
+        // Verify data exists
+        $this->assertTrue($this->storage->getState('test-circuit')->isOpen());
+        $this->assertEquals(1, $this->storage->getMetricsSnapshot('test-circuit', 60)->getTotalCalls());
+        $this->assertEquals(['test-circuit'], $this->storage->getAllCircuitNames());
+
+        // Clear all data
+        $this->storage->clear();
+
+        // Verify all data is cleared
+        $this->assertTrue($this->storage->getState('test-circuit')->isClosed()); // Should return default state
+        $this->assertEquals(0, $this->storage->getMetricsSnapshot('test-circuit', 60)->getTotalCalls());
+        $this->assertEquals([], $this->storage->getAllCircuitNames());
+
+        // Should be able to acquire lock again since locks are cleared
+        $this->assertTrue($this->storage->acquireLock('test-circuit', 'token2', 60));
+    }
+
+    public function testSaveStateReturnsTrueOnSuccess(): void
+    {
+        $state = new CircuitBreakerState(CircuitState::HALF_OPEN);
+
+        $result = $this->storage->saveState('test-circuit', $state);
+
+        $this->assertTrue($result);
+        $this->assertTrue($this->storage->getState('test-circuit')->isHalfOpen());
+    }
+
+    public function testSaveStateOverwritesExistingState(): void
+    {
+        // Save initial state
+        $initialState = new CircuitBreakerState(CircuitState::OPEN);
+        $this->storage->saveState('test-circuit', $initialState);
+        $this->assertTrue($this->storage->getState('test-circuit')->isOpen());
+
+        // Overwrite with new state
+        $newState = new CircuitBreakerState(CircuitState::CLOSED);
+        $result = $this->storage->saveState('test-circuit', $newState);
+
+        $this->assertTrue($result);
+        $this->assertTrue($this->storage->getState('test-circuit')->isClosed());
+    }
+
     protected function setUp(): void
     {
+        parent::setUp();
+
         $this->storage = new MemoryStorage();
     }
-    
+
     protected function tearDown(): void
     {
         $this->storage->clear();
