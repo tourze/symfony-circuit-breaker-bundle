@@ -40,7 +40,6 @@ class CircuitBreakerHttpClient implements HttpClientInterface
 
     /**
      * @param array<string, mixed> $options
-     * @phpstan-ignore-next-line method.childParameterType Interface constraint prevents specific typing
      */
     public function request(string $method, string $url, array $options = []): ResponseInterface
     {
@@ -112,11 +111,9 @@ class CircuitBreakerHttpClient implements HttpClientInterface
 
     /**
      * @param array<string, mixed> $options
-     * @phpstan-ignore-next-line method.childParameterType Interface constraint prevents specific typing
      */
     public function withOptions(array $options): static
     {
-        // @phpstan-ignore-next-line 返回类型static在PHPStan中的处理复杂，这里ignore是必要的
         return new self(
             $this->circuitBreakerService,
             $this->httpClient->withOptions($options),
