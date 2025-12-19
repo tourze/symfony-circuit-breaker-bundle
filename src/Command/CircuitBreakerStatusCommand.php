@@ -18,7 +18,7 @@ use Tourze\Symfony\CircuitBreaker\Service\CircuitBreakerService;
     description: '查看和管理熔断器状态',
 )]
 #[Autoconfigure]
-class CircuitBreakerStatusCommand extends Command
+final class CircuitBreakerStatusCommand extends Command
 {
     public const NAME = 'circuit-breaker:status';
 

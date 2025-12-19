@@ -2,6 +2,7 @@
 
 namespace Tourze\Symfony\CircuitBreaker\Strategy;
 
+use Monolog\Attribute\WithMonologChannel;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autoconfigure;
 
@@ -11,7 +12,8 @@ use Symfony\Component\DependencyInjection\Attribute\Autoconfigure;
  * 管理和选择熔断器策略
  */
 #[Autoconfigure]
-class StrategyManager
+#[WithMonologChannel(channel: 'circuit_breaker')]
+final class StrategyManager
 {
     /**
      * @var array<string, CircuitBreakerStrategyInterface>

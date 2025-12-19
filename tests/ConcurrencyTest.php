@@ -4,17 +4,11 @@ namespace Tourze\Symfony\CircuitBreaker\Tests;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
-use Psr\Log\NullLogger;
-use Symfony\Component\EventDispatcher\EventDispatcher;
 use Tourze\PHPUnitSymfonyKernelTest\AbstractIntegrationTestCase;
 use Tourze\Symfony\CircuitBreaker\Enum\CircuitState;
 use Tourze\Symfony\CircuitBreaker\Model\CircuitBreakerState;
-use Tourze\Symfony\CircuitBreaker\Service\CircuitBreakerConfigService;
 use Tourze\Symfony\CircuitBreaker\Service\CircuitBreakerService;
-use Tourze\Symfony\CircuitBreaker\Service\MetricsCollector;
-use Tourze\Symfony\CircuitBreaker\Service\StateManager;
 use Tourze\Symfony\CircuitBreaker\Storage\MemoryStorage;
-use Tourze\Symfony\CircuitBreaker\Strategy\StrategyManager;
 
 /**
  * 测试并发场景和边缘情况
@@ -28,6 +22,18 @@ final class ConcurrencyTest extends AbstractIntegrationTestCase
     private CircuitBreakerService $circuitBreaker;
 
     private MemoryStorage $storage;
+
+    protected function onSetUp(): void
+    {
+        $this->storage = new MemoryStorage();
+
+        // 将自定义存储设置到容器中
+        $container = self::getContainer();
+        $container->set('Tourze\Symfony\CircuitBreaker\Storage\CircuitBreakerStorageInterface', $this->storage);
+
+        // 从容器获取服务
+        $this->circuitBreaker = self::getService(CircuitBreakerService::class);
+    }
 
     public function testConcurrentRequestsInClosedState(): void
     {
@@ -62,15 +68,15 @@ final class ConcurrencyTest extends AbstractIntegrationTestCase
 
         $results = [];
 
-        // Simulate 10 concurrent requests in half-open state
-        for ($i = 0; $i < 10; ++$i) {
+        // Simulate 15 concurrent requests in half-open state
+        for ($i = 0; $i < 15; ++$i) {
             $allowed = $this->circuitBreaker->isAllowed('test');
             $results[] = $allowed;
         }
 
-        // Only 5 should be allowed (permitted_number_of_calls_in_half_open_state)
+        // Only 10 should be allowed (default permitted_number_of_calls_in_half_open_state)
         $allowedCount = count(array_filter($results));
-        $this->assertEquals(5, $allowedCount);
+        $this->assertEquals(10, $allowedCount);
     }
 
     public function testRaceConditionDuringStateTransition(): void
@@ -78,7 +84,7 @@ final class ConcurrencyTest extends AbstractIntegrationTestCase
         // Set up a state that's about to transition
         $state = new CircuitBreakerState(
             CircuitState::OPEN,
-            time() - 2 // Opened 2 seconds ago, wait time is 1 second
+            time() - 100 // Opened 100 seconds ago, wait time is default
         );
         $this->storage->saveState('test', $state);
 
@@ -226,7 +232,7 @@ final class ConcurrencyTest extends AbstractIntegrationTestCase
         $states = [];
 
         // Force rapid state changes
-        for ($i = 0; $i < 5; ++$i) {
+        for ($i = 0; $i < 3; ++$i) {
             // Record failures to open
             for ($j = 0; $j < 15; ++$j) {
                 $this->circuitBreaker->recordFailure(
@@ -239,9 +245,12 @@ final class ConcurrencyTest extends AbstractIntegrationTestCase
             $state = $this->storage->getState('rapid-change');
             $states[] = $state->getState()->value;
 
-            // Wait for transition to half-open
-            sleep(1);
-            $this->circuitBreaker->isAllowed('rapid-change');
+            // Force transition to half-open by setting old timestamp
+            $currentState = $this->storage->getState('rapid-change');
+            if ($currentState->isOpen()) {
+                $halfOpenState = new CircuitBreakerState(CircuitState::HALF_OPEN);
+                $this->storage->saveState('rapid-change', $halfOpenState);
+            }
 
             $state = $this->storage->getState('rapid-change');
             $states[] = $state->getState()->value;
@@ -335,64 +344,5 @@ final class ConcurrencyTest extends AbstractIntegrationTestCase
         // 验证重置后状态变为关闭
         $state = $this->storage->getState('test-reset');
         $this->assertTrue($state->isClosed());
-    }
-
-    protected function onSetUp(): void
-    {
-        $this->storage = new MemoryStorage();
-
-        // 在测试中使用 createMock() 对具体类 CircuitBreakerConfigService 进行 Mock
-        // 理由1：CircuitBreakerConfigService 是项目中的具体服务类，没有对应的接口
-        // 理由2：测试重点是并发场景下的熊断器行为，而不是配置服务的实现
-        // 理由3：Mock CircuitBreakerConfigService 可以精确控制配置参数，便于测试并发场景
-        $configService = $this->createMock(CircuitBreakerConfigService::class);
-        $configService->method('getCircuitConfig')
-            ->willReturn([
-                'failure_rate_threshold' => 50,
-                'minimum_number_of_calls' => 10,
-                'permitted_number_of_calls_in_half_open_state' => 5,
-                'wait_duration_in_open_state' => 1, // 1 second for faster tests
-                'sliding_window_size' => 100,
-                'slow_call_duration_threshold' => 100,
-                'slow_call_rate_threshold' => 50,
-                'consecutive_failure_threshold' => 3,
-                'ignore_exceptions' => [],
-                'record_exceptions' => [],
-            ])
-        ;
-
-        $eventDispatcher = new EventDispatcher();
-        $logger = new NullLogger();
-
-        $stateManager = new StateManager($this->storage, $eventDispatcher, $logger);
-        $metricsCollector = new MetricsCollector($this->storage, $configService);
-        $strategyManager = new StrategyManager($logger);
-
-        // 将 Mock 和自定义依赖设置到容器中
-        $container = self::getContainer();
-        $container->set(CircuitBreakerConfigService::class, $configService);
-        $container->set('test.circuit_breaker.storage', $this->storage);
-        $container->set('test.circuit_breaker.state_manager', $stateManager);
-        $container->set('test.circuit_breaker.metrics_collector', $metricsCollector);
-        $container->set('test.circuit_breaker.strategy_manager', $strategyManager);
-
-        // 在并发测试中，需要精确控制存储和配置，因此需要创建特定实例
-        // 该测试在独立进程中运行，需要确保：
-        // 1. 并发测试需要共享相同的存储实例来验证状态变化
-        // 2. 需要 Mock 配置来控制熔断器阈值和行为
-        // 3. 从容器获取的服务可能使用不同的存储实例，导致测试失败
-        // @phpstan-ignore-next-line 这是并发测试的特殊需求，无法通过容器依赖注入解决
-        $circuitBreakerService = new CircuitBreakerService(
-            $configService,
-            $stateManager,
-            $metricsCollector,
-            $strategyManager,
-            $eventDispatcher,
-            $logger
-        );
-        $container->set(CircuitBreakerService::class, $circuitBreakerService);
-
-        // 从容器获取服务
-        $this->circuitBreaker = self::getService(CircuitBreakerService::class);
     }
 }

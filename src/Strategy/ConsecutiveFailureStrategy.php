@@ -9,7 +9,7 @@ use Tourze\Symfony\CircuitBreaker\Model\MetricsSnapshot;
  *
  * 基于连续失败次数决定是否开启熔断器
  */
-class ConsecutiveFailureStrategy implements CircuitBreakerStrategyInterface
+final class ConsecutiveFailureStrategy implements CircuitBreakerStrategyInterface
 {
     /**
      * @var array<string, int> 连续失败计数

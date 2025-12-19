@@ -2,6 +2,7 @@
 
 namespace Tourze\Symfony\CircuitBreaker\Storage;
 
+use Monolog\Attribute\WithMonologChannel;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Tourze\Symfony\CircuitBreaker\Model\CallResult;
@@ -13,7 +14,8 @@ use Tourze\Symfony\CircuitBreaker\Model\MetricsSnapshot;
  *
  * 提供故障转移功能，当主存储不可用时自动切换到备用存储
  */
-class ChainedStorage implements CircuitBreakerStorageInterface
+#[WithMonologChannel(channel: 'circuit_breaker')]
+final class ChainedStorage implements CircuitBreakerStorageInterface
 {
     private const MAX_FAILURES = 3;
     private const RETRY_AFTER = 60;
@@ -36,15 +38,15 @@ class ChainedStorage implements CircuitBreakerStorageInterface
     private array $lastFailureTime = []; // 60秒后重试
 
     public function __construct(
-        RedisAtomicStorage $redisStorage,
-        DoctrineStorage $doctrineStorage,
-        MemoryStorage $memoryStorage,
+        CircuitBreakerStorageInterface $primaryStorage,
+        CircuitBreakerStorageInterface $secondaryStorage,
+        CircuitBreakerStorageInterface $fallbackStorage,
         private readonly LoggerInterface $logger = new NullLogger(),
     ) {
         $this->storages = [
-            $redisStorage,
-            $doctrineStorage,
-            $memoryStorage,
+            $primaryStorage,
+            $secondaryStorage,
+            $fallbackStorage,
         ];
     }
 

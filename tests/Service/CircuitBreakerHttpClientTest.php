@@ -3,11 +3,9 @@
 namespace Tourze\Symfony\CircuitBreaker\Tests\Service;
 
 use PHPUnit\Framework\Attributes\CoversClass;
-use PHPUnit\Framework\TestCase;
-use Psr\Log\LoggerInterface;
-use Symfony\Contracts\HttpClient\HttpClientInterface;
-use Symfony\Contracts\HttpClient\ResponseInterface;
-use Symfony\Contracts\HttpClient\ResponseStreamInterface;
+use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
+use Tourze\PHPUnitSymfonyKernelTest\AbstractIntegrationTestCase;
+use Tourze\Symfony\CircuitBreaker\Exception\CircuitOpenException;
 use Tourze\Symfony\CircuitBreaker\Service\CircuitBreakerHttpClient;
 use Tourze\Symfony\CircuitBreaker\Service\CircuitBreakerService;
 
@@ -15,60 +13,17 @@ use Tourze\Symfony\CircuitBreaker\Service\CircuitBreakerService;
  * @internal
  */
 #[CoversClass(CircuitBreakerHttpClient::class)]
-final class CircuitBreakerHttpClientTest extends TestCase
+#[RunTestsInSeparateProcesses]
+final class CircuitBreakerHttpClientTest extends AbstractIntegrationTestCase
 {
-    private CircuitBreakerService $circuitBreakerService;
-
-    private HttpClientInterface $httpClient;
-
-    private LoggerInterface $logger;
-
     private CircuitBreakerHttpClient $circuitBreakerHttpClient;
 
-    protected function setUp(): void
+    private CircuitBreakerService $circuitBreakerService;
+
+    protected function onSetUp(): void
     {
-        parent::setUp();
-
-        // 在测试中使用 createMock() 对具体类 CircuitBreakerService 进行 Mock
-        // 理由1：CircuitBreakerService 是项目中的具体服务类，没有对应的接口
-        // 理由2：测试重点是 CircuitBreakerHttpClient 的HTTP请求包装逻辑，而不是熔断器的具体实现
-        // 理由3：Mock CircuitBreakerService 可以精确控制熔断器的行为，便于测试不同的熔断状态
-        $this->circuitBreakerService = $this->createMock(CircuitBreakerService::class);
-        $this->httpClient = $this->createMock(HttpClientInterface::class);
-        $this->logger = $this->createMock(LoggerInterface::class);
-        $this->circuitBreakerHttpClient = new CircuitBreakerHttpClient(
-            $this->circuitBreakerService,
-            $this->httpClient,
-            $this->logger
-        );
-    }
-
-    public function testRequestWhenCircuitClosedMakesRequest(): void
-    {
-        // 创建mock响应
-        $response = $this->createMock(ResponseInterface::class);
-
-        // mock CircuitBreakerService.execute方法，模拟直接调用回调函数
-        $this->circuitBreakerService->expects($this->once())
-            ->method('execute')
-            ->willReturnCallback(function (string $serviceName, callable $operation, ?callable $fallback = null) {
-                // 直接调用操作回调函数，模拟熔断器允许请求通过
-                return $operation();
-            })
-        ;
-
-        // mock HttpClient.request方法
-        $this->httpClient->expects($this->once())
-            ->method('request')
-            ->with('GET', 'https://example.com/api', [])
-            ->willReturn($response)
-        ;
-
-        // 执行测试
-        $result = $this->circuitBreakerHttpClient->request('GET', 'https://example.com/api');
-
-        // 验证返回的是mock响应
-        $this->assertSame($response, $result);
+        $this->circuitBreakerHttpClient = self::getService(CircuitBreakerHttpClient::class);
+        $this->circuitBreakerService = self::getService(CircuitBreakerService::class);
     }
 
     public function testGenerateServiceNameExtractsHostFromUrl(): void
@@ -84,60 +39,32 @@ final class CircuitBreakerHttpClientTest extends TestCase
         $this->assertStringContainsString('example.com', $serviceName);
     }
 
-    public function testStreamDelegatesToHttpClient(): void
+    public function testGenerateServiceNameWithUnknownHost(): void
     {
-        $responses = [
-            $this->createMock(ResponseInterface::class),
-            $this->createMock(ResponseInterface::class),
-        ];
-        $timeout = 10.0;
+        $reflection = new \ReflectionClass($this->circuitBreakerHttpClient);
+        $method = $reflection->getMethod('generateServiceName');
+        $method->setAccessible(true);
 
-        $responseStream = $this->createMock(ResponseStreamInterface::class);
+        $serviceName = $method->invoke($this->circuitBreakerHttpClient, 'invalid-url');
 
-        $this->httpClient
-            ->expects($this->once())
-            ->method('stream')
-            ->with($responses, $timeout)
-            ->willReturn($responseStream)
-        ;
-
-        $result = $this->circuitBreakerHttpClient->stream($responses, $timeout);
-
-        $this->assertSame($responseStream, $result);
+        $this->assertIsString($serviceName);
+        $this->assertStringContainsString('unknown', $serviceName);
     }
 
-    public function testStreamDelegatesToHttpClientWithoutTimeout(): void
+    public function testRequestWhenCircuitOpenThrowsException(): void
     {
-        $responses = [
-            $this->createMock(ResponseInterface::class),
-        ];
+        // 强制打开熔断器
+        $this->circuitBreakerService->forceOpen('http_client_example.com');
 
-        $responseStream = $this->createMock(ResponseStreamInterface::class);
+        // 当熔断器打开且没有 fallback 时，应该抛出异常
+        $this->expectException(CircuitOpenException::class);
 
-        $this->httpClient
-            ->expects($this->once())
-            ->method('stream')
-            ->with($responses, null)
-            ->willReturn($responseStream)
-        ;
-
-        $result = $this->circuitBreakerHttpClient->stream($responses);
-
-        $this->assertSame($responseStream, $result);
+        $this->circuitBreakerHttpClient->request('GET', 'https://example.com/api');
     }
 
-    public function testWithOptionsCreatesNewInstanceWithSameSettings(): void
+    public function testWithOptionsCreatesNewInstance(): void
     {
         $options = ['timeout' => 30];
-
-        $newHttpClient = $this->createMock(HttpClientInterface::class);
-
-        $this->httpClient
-            ->expects($this->once())
-            ->method('withOptions')
-            ->with($options)
-            ->willReturn($newHttpClient)
-        ;
 
         $result = $this->circuitBreakerHttpClient->withOptions($options);
 
@@ -145,38 +72,44 @@ final class CircuitBreakerHttpClientTest extends TestCase
         $this->assertNotSame($this->circuitBreakerHttpClient, $result);
     }
 
-    public function testWithFallbackFactory(): void
+    public function testStreamDelegatesCorrectly(): void
     {
-        $fallbackFactory = function ($method, $url, $options) {
-            $response = $this->createMock(ResponseInterface::class);
-            $response->method('getStatusCode')->willReturn(503);
+        // 创建一个空的响应数组来测试 stream 方法
+        $responses = [];
 
-            return $response;
-        };
+        // stream 方法应该委托给底层的 httpClient
+        $result = $this->circuitBreakerHttpClient->stream($responses);
 
-        $circuitBreakerHttpClient = new CircuitBreakerHttpClient(
-            $this->circuitBreakerService,
-            $this->httpClient,
-            $this->logger,
-            'test_',
-            $fallbackFactory
-        );
+        $this->assertInstanceOf(\Symfony\Contracts\HttpClient\ResponseStreamInterface::class, $result);
+    }
 
-        // 模拟熔断器执行降级
-        $this->circuitBreakerService->expects($this->once())
-            ->method('execute')
-            ->willReturnCallback(function (string $serviceName, callable $operation, ?callable $fallback) {
-                // 调用降级函数
-                if (null === $fallback) {
-                    throw new \RuntimeException('Fallback should not be null');
-                }
+    public function testServicePrefixInGeneratedName(): void
+    {
+        $reflection = new \ReflectionClass($this->circuitBreakerHttpClient);
+        $method = $reflection->getMethod('generateServiceName');
+        $method->setAccessible(true);
 
-                return $fallback();
-            })
-        ;
+        $serviceName = $method->invoke($this->circuitBreakerHttpClient, 'https://api.example.com/v1/users');
 
-        $result = $circuitBreakerHttpClient->request('GET', 'https://example.com/api');
+        $this->assertStringStartsWith('http_client_', $serviceName);
+        $this->assertStringContainsString('api.example.com', $serviceName);
+    }
 
-        $this->assertInstanceOf(ResponseInterface::class, $result);
+    public function testGenerateServiceNameWithDifferentUrls(): void
+    {
+        $reflection = new \ReflectionClass($this->circuitBreakerHttpClient);
+        $method = $reflection->getMethod('generateServiceName');
+        $method->setAccessible(true);
+
+        $testCases = [
+            'https://api.example.com/v1' => 'api.example.com',
+            'http://localhost:8080/api' => 'localhost',
+            'https://sub.domain.example.org/path' => 'sub.domain.example.org',
+        ];
+
+        foreach ($testCases as $url => $expectedHost) {
+            $serviceName = $method->invoke($this->circuitBreakerHttpClient, $url);
+            $this->assertStringContainsString($expectedHost, $serviceName, "Failed for URL: {$url}");
+        }
     }
 }

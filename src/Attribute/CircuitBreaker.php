@@ -8,7 +8,7 @@ namespace Tourze\Symfony\CircuitBreaker\Attribute;
  * 参考Spring的CircuitBreaker注解设计
  */
 #[\Attribute(flags: \Attribute::TARGET_METHOD)]
-class CircuitBreaker
+final class CircuitBreaker
 {
     /**
      * @param string        $name                                         熔断器名称

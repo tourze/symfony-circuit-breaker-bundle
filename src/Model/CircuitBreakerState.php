@@ -7,7 +7,7 @@ use Tourze\Symfony\CircuitBreaker\Enum\CircuitState;
 /**
  * 熔断器状态信息
  */
-class CircuitBreakerState
+final class CircuitBreakerState
 {
     /**
      * @param CircuitState $state        当前状态

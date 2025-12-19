@@ -2,6 +2,7 @@
 
 namespace Tourze\Symfony\CircuitBreaker\EventSubscriber;
 
+use Monolog\Attribute\WithMonologChannel;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
@@ -16,7 +17,8 @@ use Tourze\Symfony\CircuitBreaker\Service\CircuitBreakerService;
  *
  * 用于拦截标记了CircuitBreaker注解的控制器方法
  */
-class CircuitBreakerEventSubscriber implements EventSubscriberInterface
+#[WithMonologChannel(channel: 'circuit_breaker')]
+final class CircuitBreakerEventSubscriber implements EventSubscriberInterface
 {
     /**
      * @param CircuitBreakerService $circuitBreakerService 熔断器服务

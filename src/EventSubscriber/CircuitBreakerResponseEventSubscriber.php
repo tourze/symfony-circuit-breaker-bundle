@@ -2,6 +2,7 @@
 
 namespace Tourze\Symfony\CircuitBreaker\EventSubscriber;
 
+use Monolog\Attribute\WithMonologChannel;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
@@ -17,7 +18,8 @@ use Tourze\Symfony\CircuitBreaker\Service\CircuitBreakerService;
  *
  * 用于自动收集控制器方法的成功/失败信息
  */
-class CircuitBreakerResponseEventSubscriber implements EventSubscriberInterface
+#[WithMonologChannel(channel: 'circuit_breaker')]
+final class CircuitBreakerResponseEventSubscriber implements EventSubscriberInterface
 {
     /**
      * 当前请求中的熔断器名称属性

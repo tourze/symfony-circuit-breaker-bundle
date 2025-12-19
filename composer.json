@@ -6,6 +6,7 @@
   "require": {
     "ext-redis": "*",
     "doctrine/dbal": "^4.0",
+    "monolog/monolog": "^3.1",
     "psr/log": "^3|^2|^1",
     "symfony/cache": "^7.3",
     "symfony/config": "^7.3",
@@ -13,10 +14,10 @@
     "symfony/dependency-injection": "^7.3",
     "symfony/event-dispatcher": "^7.3",
     "symfony/event-dispatcher-contracts": "^3",
-    "symfony/framework-bundle": "^7.3",
+    "symfony/framework-bundle": "^7.4",
     "symfony/http-client": "^7.3",
     "symfony/http-client-contracts": "^3.6",
-    "symfony/http-foundation": "^7.3",
+    "symfony/http-foundation": "^7.4",
     "symfony/http-kernel": "^7.3",
     "symfony/property-access": "^7.3",
     "symfony/routing": "^7.3",
@@ -40,8 +41,8 @@
     "tourze/phpunit-base": "1.*",
     "tourze/phpunit-doctrine-entity": "1.*",
     "tourze/phpunit-enum": "1.*",
-    "tourze/phpunit-symfony-kernel-test": "1.0.*",
-    "tourze/phpunit-symfony-unit-test": "1.*"
+    "tourze/phpunit-symfony-kernel-test": "2.0.*",
+    "tourze/phpunit-symfony-unit-test": "2.0.*"
   },
   "suggest": {
     "ext-redis": "使用Redis存储熔断器状态",

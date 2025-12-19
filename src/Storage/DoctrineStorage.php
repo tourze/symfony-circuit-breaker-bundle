@@ -4,6 +4,7 @@ namespace Tourze\Symfony\CircuitBreaker\Storage;
 
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Exception;
+use Monolog\Attribute\WithMonologChannel;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Tourze\Symfony\CircuitBreaker\Model\CallResult;
@@ -15,7 +16,8 @@ use Tourze\Symfony\CircuitBreaker\Model\MetricsSnapshot;
  *
  * 作为Redis的备用存储方案
  */
-class DoctrineStorage implements CircuitBreakerStorageInterface
+#[WithMonologChannel(channel: 'circuit_breaker')]
+final class DoctrineStorage implements CircuitBreakerStorageInterface
 {
     private const STATE_TABLE = 'circuit_breaker_state';
     private const METRICS_TABLE = 'circuit_breaker_metrics';

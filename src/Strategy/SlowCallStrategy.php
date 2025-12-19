@@ -9,7 +9,7 @@ use Tourze\Symfony\CircuitBreaker\Model\MetricsSnapshot;
  *
  * 基于慢调用率决定是否开启或关闭熔断器
  */
-class SlowCallStrategy implements CircuitBreakerStrategyInterface
+final class SlowCallStrategy implements CircuitBreakerStrategyInterface
 {
     public function shouldOpen(MetricsSnapshot $metrics, array $config): bool
     {

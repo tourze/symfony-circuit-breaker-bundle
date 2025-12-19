@@ -5,3 +5,61 @@ services:
     autoconfigure: true # Automatically registers your services as commands, event subscribers, etc.
     public: true
 
+  # 测试环境中使用 MemoryStorage 替代需要外部服务的存储
+  test.circuit_breaker.memory_storage_primary:
+    class: Tourze\Symfony\CircuitBreaker\Storage\MemoryStorage
+    public: true
+
+  test.circuit_breaker.memory_storage_secondary:
+    class: Tourze\Symfony\CircuitBreaker\Storage\MemoryStorage
+    public: true
+
+  test.circuit_breaker.memory_storage_fallback:
+    class: Tourze\Symfony\CircuitBreaker\Storage\MemoryStorage
+    public: true
+
+  # ChainedStorage 在测试环境中使用 MemoryStorage 作为所有后端
+  Tourze\Symfony\CircuitBreaker\Storage\ChainedStorage:
+    arguments:
+      $primaryStorage: '@test.circuit_breaker.memory_storage_primary'
+      $secondaryStorage: '@test.circuit_breaker.memory_storage_secondary'
+      $fallbackStorage: '@test.circuit_breaker.memory_storage_fallback'
+    public: true
+
+  # RedisAtomicStorage 在测试环境中需要 Redis 实例
+  # 测试会检查 Redis 可用性，如果不可用会跳过
+  test.circuit_breaker.redis:
+    class: Redis
+    public: true
+    factory: ['Tourze\Symfony\CircuitBreaker\Tests\Factory\TestRedisFactory', 'create']
+
+  Tourze\Symfony\CircuitBreaker\Storage\RedisAtomicStorage:
+    arguments:
+      $redis: '@test.circuit_breaker.redis'
+    public: true
+
+  # DoctrineStorage 在测试环境中需要数据库连接
+  # 测试会检查数据库可用性，如果不可用会跳过
+  test.circuit_breaker.doctrine_connection:
+    class: Doctrine\DBAL\Connection
+    public: true
+    factory: ['Tourze\Symfony\CircuitBreaker\Tests\Factory\TestConnectionFactory', 'create']
+
+  doctrine.dbal.circuit_breaker_connection:
+    alias: test.circuit_breaker.doctrine_connection
+    public: true
+
+  Tourze\Symfony\CircuitBreaker\Storage\DoctrineStorage:
+    arguments:
+      $connection: '@test.circuit_breaker.doctrine_connection'
+    public: true
+
+  # CircuitBreakerHttpClient 测试配置
+  test.circuit_breaker.http_client:
+    class: Symfony\Component\HttpClient\MockHttpClient
+    public: true
+
+  Tourze\Symfony\CircuitBreaker\Service\CircuitBreakerHttpClient:
+    arguments:
+      $httpClient: '@test.circuit_breaker.http_client'
+    public: true

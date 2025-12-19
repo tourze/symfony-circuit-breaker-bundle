@@ -8,7 +8,7 @@ use Symfony\Component\DependencyInjection\Attribute\Autoconfigure;
  * 熔断器配置服务
  */
 #[Autoconfigure]
-class CircuitBreakerConfigService
+final class CircuitBreakerConfigService
 {
     /**
      * 获取指定熔断器的配置

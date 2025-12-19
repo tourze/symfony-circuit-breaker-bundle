@@ -7,7 +7,7 @@ namespace Tourze\Symfony\CircuitBreaker\Exception;
  *
  * 当熔断器处于开启状态时，调用将抛出此异常
  */
-class CircuitOpenException extends \RuntimeException
+final class CircuitOpenException extends \RuntimeException
 {
     public function __construct(private readonly string $circuitName, string $message = '', int $code = 0, ?\Throwable $previous = null)
     {

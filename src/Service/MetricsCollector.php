@@ -13,7 +13,7 @@ use Tourze\Symfony\CircuitBreaker\Storage\CircuitBreakerStorageInterface;
  * 负责收集和统计熔断器的调用指标
  */
 #[Autoconfigure]
-class MetricsCollector
+final class MetricsCollector
 {
     /**
      * @var array<string, int> 未被允许的调用计数

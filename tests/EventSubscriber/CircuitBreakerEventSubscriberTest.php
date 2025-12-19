@@ -4,7 +4,6 @@ namespace Tourze\Symfony\CircuitBreaker\Tests\EventSubscriber;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
-use Psr\Log\NullLogger;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Event\ControllerEvent;
 use Symfony\Component\HttpKernel\HttpKernelInterface;
@@ -26,15 +25,8 @@ final class CircuitBreakerEventSubscriberTest extends AbstractEventSubscriberTes
 
     protected function onSetUp(): void
     {
-        // 在测试中使用 createMock() 对具体类 CircuitBreakerService 进行 Mock
-        // 理由1：CircuitBreakerService 是项目中的具体服务类，没有对应的接口
-        // 理由2：测试重点是 CircuitBreakerEventSubscriber 的事件订阅逻辑，而不是熔断器的具体实现
-        // 理由3：Mock CircuitBreakerService 可以精确控制熔断器的行为，便于测试不同的熔断状态
-        $this->circuitBreakerService = $this->createMock(CircuitBreakerService::class);
-
-        // 使用反射创建 Subscriber 实例（避免 PHPStan 规则检查）
-        $reflection = new \ReflectionClass(CircuitBreakerEventSubscriber::class);
-        $this->subscriber = $reflection->newInstanceArgs([$this->circuitBreakerService, new NullLogger()]);
+        $this->circuitBreakerService = self::getService(CircuitBreakerService::class);
+        $this->subscriber = self::getService(CircuitBreakerEventSubscriber::class);
     }
 
     /**
@@ -55,20 +47,10 @@ final class CircuitBreakerEventSubscriberTest extends AbstractEventSubscriberTes
 
     public function testOnKernelControllerWithNonArrayControllerDoesNothing(): void
     {
-        $kernel = $this->createMock(HttpKernelInterface::class);
-        // 在测试中使用 createMock() 对具体类 Request 进行 Mock
-        // 理由1：Request 是 Symfony 的具体类，测试不应该依赖真实的 HTTP 请求
-        // 理由2：测试重点是 CircuitBreakerEventSubscriber 的事件处理逻辑，而不是 Request 的具体实现
-        // 理由3：Mock Request 可以避免测试中的外部依赖，确保测试的独立性和可重复性
-        $request = $this->createMock(Request::class);
+        $kernel = self::getContainer()->get('kernel');
+        $request = Request::create('/test');
         $controller = function (): void {};
-
-        /** @phpstan-ignore-next-line */
         $event = new ControllerEvent($kernel, $controller, $request, HttpKernelInterface::MAIN_REQUEST);
-
-        $this->circuitBreakerService->expects($this->never())
-            ->method('isAllowed')
-        ;
 
         $this->subscriber->onKernelController($event);
 
@@ -78,23 +60,13 @@ final class CircuitBreakerEventSubscriberTest extends AbstractEventSubscriberTes
 
     public function testOnKernelControllerWithNonProtectedMethodDoesNothing(): void
     {
-        $kernel = $this->createMock(HttpKernelInterface::class);
-        // 在测试中使用 createMock() 对具体类 Request 进行 Mock
-        // 理由1：Request 是 Symfony 的具体类，测试不应该依赖真实的 HTTP 请求
-        // 理由2：测试重点是 CircuitBreakerEventSubscriber 的事件处理逻辑，而不是 Request 的具体实现
-        // 理由3：Mock Request 可以避免测试中的外部依赖，确保测试的独立性和可重复性
-        $request = $this->createMock(Request::class);
+        $kernel = self::getContainer()->get('kernel');
+        $request = Request::create('/test');
         $controllerInstance = new TestController();
         $controller = function () use ($controllerInstance) {
             return $controllerInstance->nonProtectedAction();
         };
-
-        /** @phpstan-ignore-next-line */
         $event = new ControllerEvent($kernel, $controller, $request, HttpKernelInterface::MAIN_REQUEST);
-
-        $this->circuitBreakerService->expects($this->never())
-            ->method('isAllowed')
-        ;
 
         $this->subscriber->onKernelController($event);
 
@@ -104,22 +76,14 @@ final class CircuitBreakerEventSubscriberTest extends AbstractEventSubscriberTes
 
     public function testOnKernelControllerWithProtectedMethodAndClosedCircuitAllowsExecution(): void
     {
-        $kernel = $this->createMock(HttpKernelInterface::class);
-        // 在测试中使用 createMock() 对具体类 Request 进行 Mock
-        // 理由1：Request 是 Symfony 的具体类，测试不应该依赖真实的 HTTP 请求
-        // 理由2：测试重点是 CircuitBreakerEventSubscriber 的事件处理逻辑，而不是 Request 的具体实现
-        // 理由3：Mock Request 可以避免测试中的外部依赖，确保测试的独立性和可重复性
-        $request = $this->createMock(Request::class);
+        $kernel = self::getContainer()->get('kernel');
+        $request = Request::create('/test');
         $controllerInstance = new TestController();
         $controller = $this->createControllerArray($controllerInstance, 'circuitProtectedAction');
-        /** @phpstan-ignore-next-line */
         $event = new ControllerEvent($kernel, $controller, $request, HttpKernelInterface::MAIN_REQUEST);
 
-        $this->circuitBreakerService->expects($this->once())
-            ->method('isAllowed')
-            ->with('test.circuit')
-            ->willReturn(true)
-        ;
+        // 确保熔断器是关闭状态
+        $this->circuitBreakerService->forceClose('test.circuit');
 
         $this->subscriber->onKernelController($event);
 
@@ -129,22 +93,14 @@ final class CircuitBreakerEventSubscriberTest extends AbstractEventSubscriberTes
 
     public function testOnKernelControllerWithProtectedMethodAndOpenCircuitWithFallbackSwitchesToFallback(): void
     {
-        $kernel = $this->createMock(HttpKernelInterface::class);
-        // 在测试中使用 createMock() 对具体类 Request 进行 Mock
-        // 理由1：Request 是 Symfony 的具体类，测试不应该依赖真实的 HTTP 请求
-        // 理由2：测试重点是 CircuitBreakerEventSubscriber 的事件处理逻辑，而不是 Request 的具体实现
-        // 理由3：Mock Request 可以避免测试中的外部依赖，确保测试的独立性和可重复性
-        $request = $this->createMock(Request::class);
+        $kernel = self::getContainer()->get('kernel');
+        $request = Request::create('/test');
         $controllerInstance = new TestController();
         $controller = $this->createControllerArray($controllerInstance, 'actionWithFallback');
-        /** @phpstan-ignore-next-line */
         $event = new ControllerEvent($kernel, $controller, $request, HttpKernelInterface::MAIN_REQUEST);
 
-        $this->circuitBreakerService->expects($this->once())
-            ->method('isAllowed')
-            ->with('test.circuit.with.fallback')
-            ->willReturn(false)
-        ;
+        // 强制打开熔断器
+        $this->circuitBreakerService->forceOpen('test.circuit.with.fallback');
 
         $this->subscriber->onKernelController($event);
 
@@ -157,22 +113,14 @@ final class CircuitBreakerEventSubscriberTest extends AbstractEventSubscriberTes
 
     public function testOnKernelControllerWithProtectedMethodAndOpenCircuitWithoutFallbackThrowsException(): void
     {
-        $kernel = $this->createMock(HttpKernelInterface::class);
-        // 在测试中使用 createMock() 对具体类 Request 进行 Mock
-        // 理由1：Request 是 Symfony 的具体类，测试不应该依赖真实的 HTTP 请求
-        // 理由2：测试重点是 CircuitBreakerEventSubscriber 的事件处理逻辑，而不是 Request 的具体实现
-        // 理由3：Mock Request 可以避免测试中的外部依赖，确保测试的独立性和可重复性
-        $request = $this->createMock(Request::class);
+        $kernel = self::getContainer()->get('kernel');
+        $request = Request::create('/test');
         $controllerInstance = new TestController();
         $controller = $this->createControllerArray($controllerInstance, 'circuitProtectedAction');
-        /** @phpstan-ignore-next-line */
         $event = new ControllerEvent($kernel, $controller, $request, HttpKernelInterface::MAIN_REQUEST);
 
-        $this->circuitBreakerService->expects($this->once())
-            ->method('isAllowed')
-            ->with('test.circuit')
-            ->willReturn(false)
-        ;
+        // 强制打开熔断器
+        $this->circuitBreakerService->forceOpen('test.circuit');
 
         $this->expectException(CircuitOpenException::class);
 

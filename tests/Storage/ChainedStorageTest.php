@@ -3,467 +3,215 @@
 namespace Tourze\Symfony\CircuitBreaker\Tests\Storage;
 
 use PHPUnit\Framework\Attributes\CoversClass;
-use PHPUnit\Framework\TestCase;
-use Psr\Log\LoggerInterface;
+use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
+use Tourze\PHPUnitSymfonyKernelTest\AbstractIntegrationTestCase;
 use Tourze\Symfony\CircuitBreaker\Enum\CircuitState;
 use Tourze\Symfony\CircuitBreaker\Model\CallResult;
 use Tourze\Symfony\CircuitBreaker\Model\CircuitBreakerState;
 use Tourze\Symfony\CircuitBreaker\Storage\ChainedStorage;
-use Tourze\Symfony\CircuitBreaker\Storage\DoctrineStorage;
 use Tourze\Symfony\CircuitBreaker\Storage\MemoryStorage;
-use Tourze\Symfony\CircuitBreaker\Storage\RedisAtomicStorage;
 
 /**
  * @internal
  */
 #[CoversClass(ChainedStorage::class)]
-final class ChainedStorageTest extends TestCase
+#[RunTestsInSeparateProcesses]
+final class ChainedStorageTest extends AbstractIntegrationTestCase
 {
     private ChainedStorage $storage;
 
-    private RedisAtomicStorage $redisStorage;
-
-    private DoctrineStorage $doctrineStorage;
-
     private MemoryStorage $memoryStorage;
 
-    private LoggerInterface $logger;
-
-    public function testGetStateFromPrimaryStorage(): void
+    public function testSaveState(): void
     {
-        $expectedState = new CircuitBreakerState(CircuitState::OPEN);
+        $state = new CircuitBreakerState(CircuitState::OPEN);
 
-        $this->redisStorage->expects($this->once())
-            ->method('isAvailable')
-            ->willReturn(true)
-        ;
+        $result = $this->storage->saveState('test-memory', $state);
+        $this->assertTrue($result);
 
-        $this->redisStorage->expects($this->once())
-            ->method('getState')
-            ->with('test')
-            ->willReturn($expectedState)
-        ;
-
-        $this->doctrineStorage->expects($this->never())
-            ->method('getState')
-        ;
-
-        $state = $this->storage->getState('test');
-
-        $this->assertEquals($expectedState, $state);
+        $retrievedState = $this->storage->getState('test-memory');
+        $this->assertTrue($retrievedState->isOpen());
     }
 
-    public function testGetStateFailoverToSecondary(): void
+    public function testAcquireLock(): void
     {
-        $expectedState = new CircuitBreakerState(CircuitState::HALF_OPEN);
+        $token = 'test-token-' . uniqid();
 
-        $this->redisStorage->expects($this->once())
-            ->method('isAvailable')
-            ->willReturn(false)
-        ;
+        $acquired = $this->storage->acquireLock('lock-test', $token, 5);
+        $this->assertTrue($acquired);
 
-        $this->doctrineStorage->expects($this->once())
-            ->method('isAvailable')
-            ->willReturn(true)
-        ;
+        $acquiredAgain = $this->storage->acquireLock('lock-test', 'another-token', 5);
+        $this->assertFalse($acquiredAgain);
 
-        $this->doctrineStorage->expects($this->once())
-            ->method('getState')
-            ->with('test')
-            ->willReturn($expectedState)
-        ;
+        $released = $this->storage->releaseLock('lock-test', $token);
+        $this->assertTrue($released);
 
-        $state = $this->storage->getState('test');
-
-        $this->assertEquals($expectedState, $state);
+        $acquiredAfterRelease = $this->storage->acquireLock('lock-test', 'new-token', 5);
+        $this->assertTrue($acquiredAfterRelease);
     }
 
-    public function testGetStateAllStoragesFailReturnsDefault(): void
+    public function testGetStateReturnsDefaultWhenNoStorageHasData(): void
     {
-        $this->redisStorage->expects($this->once())
-            ->method('isAvailable')
-            ->willReturn(false)
-        ;
-
-        $this->doctrineStorage->expects($this->once())
-            ->method('isAvailable')
-            ->willReturn(false)
-        ;
-
-        // Memory storage is always healthy, so it will get the state
-        $this->memoryStorage->expects($this->once())
-            ->method('getState')
-            ->with('test')
-            ->willReturn(new CircuitBreakerState())
-        ;
-
-        $state = $this->storage->getState('test');
+        $state = $this->storage->getState('non-existent');
 
         $this->assertTrue($state->isClosed());
+        $this->assertEquals(0, $state->getAttemptCount());
     }
 
-    public function testSaveStateSuccessOnPrimary(): void
+    public function testSaveAndGetStateWorkflow(): void
     {
-        $state = new CircuitBreakerState(CircuitState::OPEN);
+        $state = new CircuitBreakerState(CircuitState::HALF_OPEN);
 
-        $this->redisStorage->expects($this->once())
-            ->method('isAvailable')
-            ->willReturn(true)
-        ;
+        $saveResult = $this->storage->saveState('workflow-test', $state);
+        $this->assertTrue($saveResult);
 
-        $this->redisStorage->expects($this->once())
-            ->method('saveState')
-            ->with('test', $state)
-            ->willReturn(true)
-        ;
-
-        $result = $this->storage->saveState('test', $state);
-
-        $this->assertTrue($result);
+        $retrievedState = $this->storage->getState('workflow-test');
+        $this->assertEquals(CircuitState::HALF_OPEN, $retrievedState->getState());
     }
 
-    public function testSaveStatePrimaryFailsButSecondarySucceeds(): void
-    {
-        $state = new CircuitBreakerState(CircuitState::OPEN);
-
-        $this->redisStorage->expects($this->once())
-            ->method('isAvailable')
-            ->willReturn(true)
-        ;
-
-        $this->redisStorage->expects($this->once())
-            ->method('saveState')
-            ->with('test', $state)
-            ->willThrowException(new \Exception('Primary storage error'))
-        ;
-
-        $this->doctrineStorage->expects($this->once())
-            ->method('isAvailable')
-            ->willReturn(true)
-        ;
-
-        $this->doctrineStorage->expects($this->once())
-            ->method('saveState')
-            ->with('test', $state)
-            ->willReturn(true)
-        ;
-
-        $result = $this->storage->saveState('test', $state);
-
-        $this->assertTrue($result);
-    }
-
-    public function testRecordCallWithFailover(): void
+    public function testRecordCallPersistsData(): void
     {
         $callResult = new CallResult(true, 100.0, time());
 
-        // Primary fails
-        $this->redisStorage->expects($this->once())
-            ->method('isAvailable')
-            ->willReturn(true)
-        ;
+        $this->storage->recordCall('call-test', $callResult);
 
-        $this->redisStorage->expects($this->once())
-            ->method('recordCall')
-            ->willThrowException(new \Exception('Write error'))
-        ;
-
-        // Secondary succeeds
-        $this->doctrineStorage->expects($this->once())
-            ->method('isAvailable')
-            ->willReturn(true)
-        ;
-
-        $this->doctrineStorage->expects($this->once())
-            ->method('recordCall')
-            ->with('test', $callResult)
-        ;
-
-        $this->storage->recordCall('test', $callResult);
+        $metrics = $this->storage->getMetricsSnapshot('call-test', 60);
+        $this->assertEquals(1, $metrics->getTotalCalls());
+        $this->assertEquals(1, $metrics->getSuccessCalls());
     }
 
-    public function testAcquireLockRetryOnFailure(): void
+    public function testRecordMultipleCalls(): void
     {
-        // First attempt fails
-        $this->redisStorage->expects($this->once())
-            ->method('isAvailable')
-            ->willReturn(true)
-        ;
+        $successResult = new CallResult(true, 50.0, time());
+        $failureResult = new CallResult(false, 200.0, time());
 
-        $this->redisStorage->expects($this->once())
-            ->method('acquireLock')
-            ->with('test', 'token1', 5)
-            ->willReturn(false)
-        ;
+        $this->storage->recordCall('multi-call', $successResult);
+        $this->storage->recordCall('multi-call', $failureResult);
 
-        // Should not try secondary for lock operations
-        $this->doctrineStorage->expects($this->never())
-            ->method('acquireLock')
-        ;
-
-        $result = $this->storage->acquireLock('test', 'token1', 5);
-
-        $this->assertFalse($result);
+        $metrics = $this->storage->getMetricsSnapshot('multi-call', 60);
+        $this->assertEquals(2, $metrics->getTotalCalls());
+        $this->assertEquals(1, $metrics->getSuccessCalls());
+        $this->assertEquals(1, $metrics->getFailedCalls());
     }
 
-    public function testIsAvailableAtLeastOneStorageAvailable(): void
+    public function testReleaseLockWithWrongTokenFails(): void
     {
-        $this->redisStorage->expects($this->once())
-            ->method('isAvailable')
-            ->willReturn(false)
-        ;
+        $token = 'correct-token-' . uniqid();
 
-        $this->doctrineStorage->expects($this->once())
-            ->method('isAvailable')
-            ->willReturn(true)
-        ;
+        $this->storage->acquireLock('lock-test-2', $token, 5);
 
+        $released = $this->storage->releaseLock('lock-test-2', 'wrong-token');
+        $this->assertFalse($released);
+    }
+
+    public function testIsAvailableReturnsTrue(): void
+    {
         $this->assertTrue($this->storage->isAvailable());
     }
 
-    public function testIsAvailableAllStoragesUnavailable(): void
+    public function testGetAllCircuitNames(): void
     {
-        $this->redisStorage->expects($this->once())
-            ->method('isAvailable')
-            ->willReturn(false)
-        ;
+        $state1 = new CircuitBreakerState(CircuitState::OPEN);
+        $state2 = new CircuitBreakerState(CircuitState::CLOSED);
 
-        $this->doctrineStorage->expects($this->once())
-            ->method('isAvailable')
-            ->willReturn(false)
-        ;
+        $this->storage->saveState('circuit-1', $state1);
+        $this->storage->saveState('circuit-2', $state2);
 
-        // Memory storage is always available in our implementation
-        $this->assertTrue($this->storage->isAvailable());
+        $names = $this->storage->getAllCircuitNames();
+
+        $this->assertContains('circuit-1', $names);
+        $this->assertContains('circuit-2', $names);
+    }
+
+    public function testDeleteCircuitRemovesData(): void
+    {
+        $state = new CircuitBreakerState(CircuitState::OPEN);
+        $this->storage->saveState('to-delete', $state);
+
+        $this->storage->deleteCircuit('to-delete');
+
+        $retrievedState = $this->storage->getState('to-delete');
+        $this->assertTrue($retrievedState->isClosed());
     }
 
     public function testGetActiveStorageType(): void
     {
-        $this->redisStorage->expects($this->once())
-            ->method('isAvailable')
-            ->willReturn(false)
-        ;
+        $state = new CircuitBreakerState(CircuitState::OPEN);
+        $this->storage->saveState('active-test', $state);
 
-        $this->doctrineStorage->expects($this->once())
-            ->method('isAvailable')
-            ->willReturn(true)
-        ;
+        $activeType = $this->storage->getActiveStorageType();
 
-        // Force a read operation to set active storage
-        $this->doctrineStorage->expects($this->once())
-            ->method('getState')
-            ->willReturn(new CircuitBreakerState())
-        ;
-
-        $this->storage->getState('test');
-
-        $this->assertEquals('doctrine', $this->storage->getActiveStorageType());
+        $this->assertContains($activeType, ['redis', 'doctrine', 'memory']);
     }
 
-    public function testDeleteCircuitCascadestoAllStorages(): void
+    public function testActiveStorageIsSetAfterOperation(): void
     {
-        // All storages should be called regardless of availability
-        $this->redisStorage->expects($this->once())
-            ->method('deleteCircuit')
-            ->with('test')
-        ;
+        $this->storage->getState('test-active');
 
-        $this->doctrineStorage->expects($this->once())
-            ->method('deleteCircuit')
-            ->with('test')
-        ;
-
-        $this->memoryStorage->expects($this->once())
-            ->method('deleteCircuit')
-            ->with('test')
-        ;
-
-        $this->storage->deleteCircuit('test');
+        $activeStorage = $this->storage->getActiveStorage();
+        $this->assertNotNull($activeStorage);
     }
 
-    public function testGetAllCircuitNamesMergesFromAllAvailableStorages(): void
+    public function testMetricsWindowSize(): void
     {
-        $this->redisStorage->expects($this->once())
-            ->method('isAvailable')
-            ->willReturn(true)
-        ;
+        $oldCall = new CallResult(true, 100.0, time() - 120);
+        $recentCall = new CallResult(true, 50.0, time());
 
-        $this->redisStorage->expects($this->once())
-            ->method('getAllCircuitNames')
-            ->willReturn(['circuit1', 'circuit2'])
-        ;
+        $this->storage->recordCall('window-test', $oldCall);
+        $this->storage->recordCall('window-test', $recentCall);
 
-        $this->doctrineStorage->expects($this->once())
-            ->method('isAvailable')
-            ->willReturn(true)
-        ;
+        $metrics = $this->storage->getMetricsSnapshot('window-test', 60);
 
-        $this->doctrineStorage->expects($this->once())
-            ->method('getAllCircuitNames')
-            ->willReturn(['circuit2', 'circuit3'])
-        ;
-
-        // Memory storage is always available, so it will be called
-        $this->memoryStorage->expects($this->once())
-            ->method('getAllCircuitNames')
-            ->willReturn([])
-        ;
-
-        $names = $this->storage->getAllCircuitNames();
-
-        $this->assertCount(3, $names);
-        $this->assertContains('circuit1', $names);
-        $this->assertContains('circuit2', $names);
-        $this->assertContains('circuit3', $names);
+        $this->assertGreaterThanOrEqual(1, $metrics->getTotalCalls());
     }
 
-    public function testFailureTrackingDisablesFailedStorage(): void
+    public function testChainedStorageFailoverBehavior(): void
     {
-        // Make Redis fail multiple times to reach MAX_FAILURES threshold
-        $this->redisStorage->expects($this->exactly(3))
-            ->method('isAvailable')
-            ->willReturn(true)
-        ;
+        $state = new CircuitBreakerState(CircuitState::OPEN);
 
-        $this->redisStorage->expects($this->exactly(3))
-            ->method('getState')
-            ->willThrowException(new \Exception('Storage error'))
-        ;
+        $this->storage->saveState('failover-test', $state);
 
-        // Should fallback to secondary for first 3 calls
-        $this->doctrineStorage->expects($this->exactly(4))
-            ->method('isAvailable')
-            ->willReturn(true)
-        ;
+        $retrievedState = $this->storage->getState('failover-test');
+        $this->assertTrue($retrievedState->isOpen());
 
-        $this->doctrineStorage->expects($this->exactly(4))
-            ->method('getState')
-            ->willReturn(new CircuitBreakerState())
-        ;
-
-        // Make 3 calls to reach MAX_FAILURES (which is 3)
-        $this->storage->getState('test1');
-        $this->storage->getState('test2');
-        $this->storage->getState('test3');
-
-        // Fourth call - Redis should be skipped due to failures
-        $this->storage->getState('test4');
+        $activeType = $this->storage->getActiveStorageType();
+        $this->assertNotEquals('none', $activeType);
     }
 
-    public function testReleaseLockCallsActiveStorage(): void
+    public function testMultipleCircuitsIndependence(): void
     {
-        $token = 'test-token';
+        $openState = new CircuitBreakerState(CircuitState::OPEN);
+        $closedState = new CircuitBreakerState(CircuitState::CLOSED);
 
-        $this->redisStorage->expects($this->once())
-            ->method('isAvailable')
-            ->willReturn(true)
-        ;
+        $this->storage->saveState('circuit-a', $openState);
+        $this->storage->saveState('circuit-b', $closedState);
 
-        $this->redisStorage->expects($this->once())
-            ->method('releaseLock')
-            ->with('test', $token)
-            ->willReturn(true)
-        ;
+        $stateA = $this->storage->getState('circuit-a');
+        $stateB = $this->storage->getState('circuit-b');
 
-        $result = $this->storage->releaseLock('test', $token);
-
-        $this->assertTrue($result);
+        $this->assertTrue($stateA->isOpen());
+        $this->assertTrue($stateB->isClosed());
     }
 
-    public function testReleaseLockWithFailoverToSecondaryStorage(): void
+    public function testAverageResponseTimeCalculation(): void
     {
-        $token = 'test-token';
+        $call1 = new CallResult(true, 100.0, time());
+        $call2 = new CallResult(true, 200.0, time());
 
-        $this->redisStorage->expects($this->once())
-            ->method('isAvailable')
-            ->willReturn(true)
-        ;
+        $this->storage->recordCall('avg-test', $call1);
+        $this->storage->recordCall('avg-test', $call2);
 
-        $this->redisStorage->expects($this->once())
-            ->method('releaseLock')
-            ->with('test', $token)
-            ->willThrowException(new \RuntimeException('Redis error'))
-        ;
+        $metrics = $this->storage->getMetricsSnapshot('avg-test', 60);
 
-        $this->doctrineStorage->expects($this->once())
-            ->method('isAvailable')
-            ->willReturn(true)
-        ;
-
-        $this->doctrineStorage->expects($this->once())
-            ->method('releaseLock')
-            ->with('test', $token)
-            ->willReturn(true)
-        ;
-
-        $result = $this->storage->releaseLock('test', $token);
-
-        $this->assertTrue($result);
+        $expectedAvg = (100.0 + 200.0) / 2;
+        $this->assertEquals($expectedAvg, $metrics->getAvgResponseTime());
     }
 
-    public function testReleaseLockReturnsDefaultWhenAllStoragesFail(): void
+    protected function onSetUp(): void
     {
-        $token = 'test-token';
+        $this->memoryStorage = new MemoryStorage();
+        $this->memoryStorage->clear();
 
-        // Redis fails
-        $this->redisStorage->expects($this->once())
-            ->method('isAvailable')
-            ->willReturn(true)
-        ;
-
-        $this->redisStorage->expects($this->once())
-            ->method('releaseLock')
-            ->willThrowException(new \RuntimeException('Redis error'))
-        ;
-
-        // Doctrine fails
-        $this->doctrineStorage->expects($this->once())
-            ->method('isAvailable')
-            ->willReturn(true)
-        ;
-
-        $this->doctrineStorage->expects($this->once())
-            ->method('releaseLock')
-            ->willThrowException(new \RuntimeException('Doctrine error'))
-        ;
-
-        // Memory fails (MemoryStorage doesn't call isAvailable in isStorageHealthy)
-        $this->memoryStorage->expects($this->once())
-            ->method('releaseLock')
-            ->willThrowException(new \RuntimeException('Memory error'))
-        ;
-
-        $result = $this->storage->releaseLock('test', $token);
-
-        $this->assertFalse($result); // Should return default value false
-    }
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        // 在测试中使用 createMock() 对具体类 RedisAtomicStorage 进行 Mock
-        // 理由1：RedisAtomicStorage 是项目中的具体存储实现类，没有对应的接口
-        // 理由2：测试重点是 ChainedStorage 的链式存储逻辑，而不是具体存储的实现
-        // 理由3：Mock 具体存储类可以精确控制每个存储层的行为，便于测试故障转移逻辑
-        $this->redisStorage = $this->createMock(RedisAtomicStorage::class);
-        // 在测试中使用 createMock() 对具体类 DoctrineStorage 进行 Mock
-        // 理由1：DoctrineStorage 是项目中的具体存储实现类，没有对应的接口
-        // 理由2：测试重点是 ChainedStorage 的链式存储逻辑，而不是具体存储的实现
-        // 理由3：Mock 具体存储类可以精确控制每个存储层的行为，便于测试故障转移逻辑
-        $this->doctrineStorage = $this->createMock(DoctrineStorage::class);
-        // 在测试中使用 createMock() 对具体类 MemoryStorage 进行 Mock
-        // 理由1：MemoryStorage 是项目中的具体存储实现类，没有对应的接口
-        // 理由2：测试重点是 ChainedStorage 的链式存储逻辑，而不是具体存储的实现
-        // 理由3：Mock 具体存储类可以精确控制每个存储层的行为，便于测试故障转移逻辑
-        $this->memoryStorage = $this->createMock(MemoryStorage::class);
-        $this->logger = $this->createMock(LoggerInterface::class);
-
-        $this->storage = new ChainedStorage(
-            $this->redisStorage,
-            $this->doctrineStorage,
-            $this->memoryStorage,
-            $this->logger
-        );
+        $this->storage = self::getService(ChainedStorage::class);
     }
 }

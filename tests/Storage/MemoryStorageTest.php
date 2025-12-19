@@ -191,13 +191,6 @@ final class MemoryStorageTest extends TestCase
 
     protected function setUp(): void
     {
-        parent::setUp();
-
         $this->storage = new MemoryStorage();
-    }
-
-    protected function tearDown(): void
-    {
-        $this->storage->clear();
     }
 }

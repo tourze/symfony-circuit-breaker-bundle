@@ -6,13 +6,15 @@ use Psr\Log\LoggerInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 use Symfony\Contracts\HttpClient\ResponseInterface;
 use Symfony\Contracts\HttpClient\ResponseStreamInterface;
+use Monolog\Attribute\WithMonologChannel;
 
 /**
  * 带熔断功能的HTTP客户端
  *
  * 包装原始HTTP客户端，添加熔断功能
  */
-class CircuitBreakerHttpClient implements HttpClientInterface
+#[WithMonologChannel(channel: 'circuit_breaker')]
+final class CircuitBreakerHttpClient implements HttpClientInterface
 {
     /** @var callable|null */
     private $fallbackFactory;

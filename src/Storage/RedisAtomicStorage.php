@@ -2,6 +2,7 @@
 
 namespace Tourze\Symfony\CircuitBreaker\Storage;
 
+use Monolog\Attribute\WithMonologChannel;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Tourze\RedisDedicatedConnectionBundle\Attribute\WithDedicatedConnection;
@@ -15,7 +16,8 @@ use Tourze\Symfony\CircuitBreaker\Model\MetricsSnapshot;
  * 使用Redis的原子操作来存储熔断器状态和指标
  */
 #[WithDedicatedConnection(channel: 'circuit_breaker')]
-class RedisAtomicStorage implements CircuitBreakerStorageInterface
+#[WithMonologChannel(channel: 'circuit_breaker')]
+final class RedisAtomicStorage implements CircuitBreakerStorageInterface
 {
     private const KEY_PREFIX = 'circuit:';
     private const STATE_KEY_SUFFIX = ':state';

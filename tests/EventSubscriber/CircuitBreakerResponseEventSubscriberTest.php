@@ -13,6 +13,7 @@ use Symfony\Component\HttpKernel\HttpKernelInterface;
 use Tourze\PHPUnitSymfonyKernelTest\AbstractEventSubscriberTestCase;
 use Tourze\Symfony\CircuitBreaker\EventSubscriber\CircuitBreakerResponseEventSubscriber;
 use Tourze\Symfony\CircuitBreaker\Service\CircuitBreakerService;
+use Tourze\Symfony\CircuitBreaker\Storage\MemoryStorage;
 
 /**
  * @internal
@@ -25,17 +26,17 @@ final class CircuitBreakerResponseEventSubscriberTest extends AbstractEventSubsc
 
     private CircuitBreakerResponseEventSubscriber $subscriber;
 
+    private MemoryStorage $storage;
+
     protected function onSetUp(): void
     {
-        // 在测试中使用 createMock() 对具体类 CircuitBreakerService 进行 Mock
-        // 理由1：CircuitBreakerService 是项目中的具体服务类，没有对应的接口
-        // 理由2：测试重点是 CircuitBreakerResponseEventSubscriber 的响应处理逻辑，而不是熔断器的具体实现
-        // 理由3：Mock CircuitBreakerService 可以精确控制熔断器的行为，便于测试不同的响应场景
-        $this->circuitBreakerService = $this->createMock(CircuitBreakerService::class);
+        // 使用真实服务而不是 mock
+        $this->storage = new MemoryStorage();
+        $container = self::getContainer();
+        $container->set('Tourze\Symfony\CircuitBreaker\Storage\CircuitBreakerStorageInterface', $this->storage);
 
-        // 使用反射创建 Subscriber 实例（避免 PHPStan 规则检查）
-        $reflection = new \ReflectionClass(CircuitBreakerResponseEventSubscriber::class);
-        $this->subscriber = $reflection->newInstanceArgs([$this->circuitBreakerService]);
+        $this->circuitBreakerService = self::getService(CircuitBreakerService::class);
+        $this->subscriber = self::getService(CircuitBreakerResponseEventSubscriber::class);
     }
 
     /**
@@ -57,7 +58,7 @@ final class CircuitBreakerResponseEventSubscriberTest extends AbstractEventSubsc
 
     public function testOnKernelResponseWithNormalResponseDoesNotModifyResponse(): void
     {
-        $kernel = $this->createMock(HttpKernelInterface::class);
+        $kernel = self::getContainer()->get('kernel');
         $request = new Request();
         $response = new Response('Test content');
 
@@ -70,13 +71,12 @@ final class CircuitBreakerResponseEventSubscriberTest extends AbstractEventSubsc
 
     public function testOnKernelControllerWithoutCircuitBreakerAttribute(): void
     {
-        $kernel = $this->createMock(HttpKernelInterface::class);
+        $kernel = self::getContainer()->get('kernel');
         $request = new Request();
 
         // 创建一个没有CircuitBreaker属性的控制器
         $testController = new TestControllerWithoutAttribute();
         $controller = $this->createControllerArray($testController, 'action');
-        /** @phpstan-ignore-next-line */
         $event = new ControllerEvent($kernel, $controller, $request, HttpKernelInterface::MAIN_REQUEST);
 
         $this->subscriber->onKernelController($event);
@@ -87,13 +87,12 @@ final class CircuitBreakerResponseEventSubscriberTest extends AbstractEventSubsc
 
     public function testOnKernelControllerWithCircuitBreakerAttribute(): void
     {
-        $kernel = $this->createMock(HttpKernelInterface::class);
+        $kernel = self::getContainer()->get('kernel');
         $request = new Request();
 
         // 创建一个有CircuitBreaker属性的控制器
         $testController = new TestControllerWithAttribute();
         $controller = $this->createControllerArray($testController, 'actionWithCircuitBreaker');
-        /** @phpstan-ignore-next-line */
         $event = new ControllerEvent($kernel, $controller, $request, HttpKernelInterface::MAIN_REQUEST);
 
         $this->subscriber->onKernelController($event);
@@ -104,7 +103,7 @@ final class CircuitBreakerResponseEventSubscriberTest extends AbstractEventSubsc
 
     public function testOnKernelControllerWithNonArrayController(): void
     {
-        $kernel = $this->createMock(HttpKernelInterface::class);
+        $kernel = self::getContainer()->get('kernel');
         $request = new Request();
 
         // 使用非数组形式的控制器（如闭包）
@@ -121,71 +120,80 @@ final class CircuitBreakerResponseEventSubscriberTest extends AbstractEventSubsc
 
     public function testOnKernelResponseWithSuccessStatus(): void
     {
-        $kernel = $this->createMock(HttpKernelInterface::class);
+        $kernel = self::getContainer()->get('kernel');
         $request = new Request();
         $request->attributes->set('_circuit_breaker_name', 'test-circuit');
         $response = new Response('Success', 200);
 
         $event = new ResponseEvent($kernel, $request, HttpKernelInterface::MAIN_REQUEST, $response);
 
-        $this->circuitBreakerService
-            ->expects($this->once())
-            ->method('recordSuccess')
-            ->with('test-circuit')
-        ;
+        // 记录初始指标
+        $initialMetrics = $this->storage->getMetricsSnapshot('test-circuit', 100);
+        $initialSuccessCalls = $initialMetrics->getSuccessCalls();
 
         $this->subscriber->onKernelResponse($event);
+
+        // 验证成功调用被记录
+        $metrics = $this->storage->getMetricsSnapshot('test-circuit', 100);
+        $this->assertEquals($initialSuccessCalls + 1, $metrics->getSuccessCalls());
     }
 
     public function testOnKernelResponseWithErrorStatus(): void
     {
-        $kernel = $this->createMock(HttpKernelInterface::class);
+        $kernel = self::getContainer()->get('kernel');
         $request = new Request();
-        $request->attributes->set('_circuit_breaker_name', 'test-circuit');
+        $request->attributes->set('_circuit_breaker_name', 'test-circuit-error');
         $response = new Response('Error', 500);
 
         $event = new ResponseEvent($kernel, $request, HttpKernelInterface::MAIN_REQUEST, $response);
 
-        $this->circuitBreakerService
-            ->expects($this->once())
-            ->method('recordFailure')
-            ->with('test-circuit', self::isInstanceOf(\Exception::class))
-        ;
+        // 记录初始指标
+        $initialMetrics = $this->storage->getMetricsSnapshot('test-circuit-error', 100);
+        $initialFailedCalls = $initialMetrics->getFailedCalls();
 
         $this->subscriber->onKernelResponse($event);
+
+        // 验证失败调用被记录
+        $metrics = $this->storage->getMetricsSnapshot('test-circuit-error', 100);
+        $this->assertEquals($initialFailedCalls + 1, $metrics->getFailedCalls());
     }
 
     public function testOnKernelExceptionRecordsFailure(): void
     {
-        $kernel = $this->createMock(HttpKernelInterface::class);
+        $kernel = self::getContainer()->get('kernel');
         $request = new Request();
-        $request->attributes->set('_circuit_breaker_name', 'test-circuit');
+        $request->attributes->set('_circuit_breaker_name', 'test-circuit-exception');
         $exception = new \RuntimeException('Test exception');
 
         $event = new ExceptionEvent($kernel, $request, HttpKernelInterface::MAIN_REQUEST, $exception);
 
-        $this->circuitBreakerService
-            ->expects($this->once())
-            ->method('recordFailure')
-            ->with('test-circuit', $exception)
-        ;
+        // 记录初始指标
+        $initialMetrics = $this->storage->getMetricsSnapshot('test-circuit-exception', 100);
+        $initialFailedCalls = $initialMetrics->getFailedCalls();
 
         $this->subscriber->onKernelException($event);
+
+        // 验证失败调用被记录
+        $metrics = $this->storage->getMetricsSnapshot('test-circuit-exception', 100);
+        $this->assertEquals($initialFailedCalls + 1, $metrics->getFailedCalls());
     }
 
     public function testOnKernelExceptionWithoutCircuitName(): void
     {
-        $kernel = $this->createMock(HttpKernelInterface::class);
+        $kernel = self::getContainer()->get('kernel');
         $request = new Request();
         $exception = new \RuntimeException('Test exception');
 
         $event = new ExceptionEvent($kernel, $request, HttpKernelInterface::MAIN_REQUEST, $exception);
 
-        $this->circuitBreakerService
-            ->expects($this->never())
-            ->method('recordFailure')
-        ;
+        // 记录初始指标 - 使用一个不应被记录的熔断器名称
+        $initialMetrics = $this->storage->getMetricsSnapshot('unrelated-circuit', 100);
+        $initialTotalCalls = $initialMetrics->getTotalCalls();
 
         $this->subscriber->onKernelException($event);
+
+        // 验证没有调用被记录（因为没有熔断器名称）
+        $metrics = $this->storage->getMetricsSnapshot('unrelated-circuit', 100);
+        $this->assertEquals($initialTotalCalls, $metrics->getTotalCalls());
     }
 }

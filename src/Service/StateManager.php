@@ -2,6 +2,7 @@
 
 namespace Tourze\Symfony\CircuitBreaker\Service;
 
+use Monolog\Attribute\WithMonologChannel;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autoconfigure;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
@@ -18,7 +19,8 @@ use Tourze\Symfony\CircuitBreaker\Storage\CircuitBreakerStorageInterface;
  * 负责管理和转换熔断器状态
  */
 #[Autoconfigure]
-class StateManager
+#[WithMonologChannel(channel: 'circuit_breaker')]
+final class StateManager
 {
     private const CACHE_TTL = 1;
 

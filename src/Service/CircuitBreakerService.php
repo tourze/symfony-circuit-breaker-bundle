@@ -2,6 +2,7 @@
 
 namespace Tourze\Symfony\CircuitBreaker\Service;
 
+use Monolog\Attribute\WithMonologChannel;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autoconfigure;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
@@ -18,7 +19,8 @@ use Tourze\Symfony\CircuitBreaker\Strategy\StrategyManager;
  * 基于Symfony组件实现的熔断器核心服务
  */
 #[Autoconfigure]
-class CircuitBreakerService
+#[WithMonologChannel(channel: 'circuit_breaker')]
+final class CircuitBreakerService
 {
     public function __construct(
         private readonly CircuitBreakerConfigService $configService,

@@ -15,7 +15,7 @@ use Tourze\Symfony\CircuitBreaker\Storage\RedisAtomicStorage;
  * 管理所有熔断器实例的中央注册表
  */
 #[Autoconfigure]
-class CircuitBreakerRegistry
+final class CircuitBreakerRegistry
 {
     private const CACHE_TTL = 1;
 
